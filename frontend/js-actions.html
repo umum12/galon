@@ -1,0 +1,310 @@
+<script>
+/* ── SUBMIT STATE MACHINE ────── */
+function isDemo() { return S.user && S.user.role==='demo'; }
+function updateSubmitText() {
+  syncQtyChips();
+  if (S.submitState !== 'idle') return;
+  if (isDemo()) { E.submitBtn.disabled=true; E.submitBtn.textContent='🔒 Mode Demo'; E.submitBtn.setAttribute('data-mode',S.mode); E.submitBtn.setAttribute('data-state','idle'); return; }
+  const qtyValid = Number.isInteger(S.qty) && S.qty >= 1;
+  E.submitBtn.disabled = !qtyValid;
+  E.submitBtn.setAttribute('data-mode', S.mode);
+  E.submitBtn.setAttribute('data-state','idle');
+  if (!qtyValid) { E.submitBtn.textContent = 'Jumlah minimal 1'; return; }
+  const after = S.mode==='AMBIL'?S.stock-S.qty:S.stock+S.qty;
+  const arrow = S.mode==='AMBIL'?'↓':'↑';
+  E.submitBtn.textContent = `Kirim  ${S.stock} ${arrow} ${after}`;
+}
+function setSubmitState(state) {
+  S.submitState = state;
+  if (state==='idle') {
+    E.submitBtn.setAttribute('data-state','idle');
+    updateSubmitText();
+  } else if (state==='submitting') {
+    E.submitBtn.disabled=true; E.submitBtn.setAttribute('data-state','submitting');
+    E.submitBtn.innerHTML = spinnerSvg(18) + ' Menyimpan…';
+  }
+}
+function handleSubmitTap() {
+  if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
+  setActivity();
+  if (S.submitState==='submitting') return;
+  if (!Number.isInteger(S.qty)||S.qty<1) { toast('Jumlah harus lebih dari 0.','err'); return; }
+  if (S.mode==='DATANG'&&!S.photoDataUrl) { toast('Foto invoice belum diambil.','err'); return; }
+
+  const w = readTxWhen();
+  if (w.error) { toast(w.error,'err'); return; }
+
+  const after  = S.mode==='AMBIL' ? S.stock-S.qty : S.stock+S.qty;
+  const aksi   = S.mode==='AMBIL' ? 'mengambil' : 'menambahkan';
+  const judul  = S.mode==='AMBIL' ? 'Konfirmasi Ambil Galon' : 'Konfirmasi Galon Datang';
+  let   pesan  = `Anda ${aksi} ${S.qty} galon. Sisa stok akan menjadi ${after} galon.`;
+  if (after < 0) pesan += ' Perhatian: stok akan minus.';
+  if (w.custom)  pesan += ` Waktu transaksi: ${formatTanggalID(w.date)}, ${w.time}.`;
+
+  showConfirm(judul, pesan, () => {
+    setSubmitState('submitting');
+    doSaveTransaction();
+  });
+}
+
+/* ── MODE ────────────────────── */
+function setMode(mode) {
+  S.mode=mode; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
+  E.modeAmbilBtn.classList.toggle('active', mode!=='DATANG');
+  E.modeDatangBtn.classList.toggle('active', mode==='DATANG');
+  E.photoSection.classList.toggle('hidden', mode!=='DATANG');
+  S.qty=0; E.qtyInput.value=0; renderQtyChips(); resetTxWhen(); setSubmitState('idle'); setActivity();
+}
+function renderPhotoThumb() {
+  if (!S.photoDataUrl) {
+    E.photoThumb.innerHTML='📷 Tap untuk pilih foto — dari galeri atau kamera';
+    E.photoThumb.classList.remove('has-photo');
+    E.photoRemoveBtn.classList.add('hidden');
+  } else {
+    E.photoThumb.innerHTML=`<img src="${S.photoDataUrl}" alt="Invoice">`;
+    E.photoThumb.classList.add('has-photo');
+    E.photoRemoveBtn.classList.remove('hidden');
+  }
+}
+
+/* ── WAKTU TRANSAKSI ─────────── */
+function openTxWhenEdit() {
+  const now = new Date();
+  E.txDateInput.min   = toISODate(new Date(now.getTime() - MAX_BACKDATE_DAYS*86400000));
+  E.txDateInput.max   = toISODate(now);
+  E.txDateInput.value = toISODate(now);
+  E.txTimeInput.value = toHHMM(now);
+  S.txCustom = true;
+  E.timeNowView.classList.add('hidden');
+  E.timeEditView.classList.remove('hidden');
+  setActivity();
+}
+function resetTxWhen() {
+  S.txCustom = false;
+  E.txDateInput.value = ''; E.txTimeInput.value = '';
+  E.timeEditView.classList.add('hidden');
+  E.timeNowView.classList.remove('hidden');
+}
+/* Validasi tanggal/jam pilihan user (server memvalidasi ulang). */
+function readTxWhen() {
+  if (!S.txCustom) return { custom:false };
+  const date = E.txDateInput.value, time = E.txTimeInput.value;
+  if (!date || !time) return { error:'Tanggal dan jam harus diisi.' };
+  const now = new Date();
+  if (date > toISODate(now)) return { error:'Tanggal tidak boleh di masa depan.' };
+  if (date < toISODate(new Date(now.getTime() - MAX_BACKDATE_DAYS*86400000))) return { error:`Maksimal mundur ${MAX_BACKDATE_DAYS} hari.` };
+  if (date === toISODate(now) && time > toHHMM(now)) return { error:'Jam tidak boleh di masa depan.' };
+  return { custom:true, date, time };
+}
+
+/* ── APPLY DATA ──────────────── */
+function applyData(res) {
+  const prev=S.stock;
+  if(res.stock!==undefined)  S.stock  =Number(res.stock);
+  if(res.warning!==undefined)S.warning=Number(res.warning);
+  if(res.danger!==undefined) S.danger =Number(res.danger);
+  if(res.appName!==undefined)S.appName=res.appName;
+  if(res.status!==undefined) S.status =res.status;
+  if(res.recent!==undefined) S.recent =res.recent;
+  if(res.month!==undefined)  S.month  =res.month;
+  if(res.monthLabel!==undefined) S.monthLabel=res.monthLabel;
+  if(res.user!==undefined)   S.user   =res.user;
+  if(res.announcements!==undefined)      S.ann = res.announcements;
+  if(res.announcementsAdmin!==undefined) S.annAdmin = res.announcementsAdmin;
+  if(res.annPetugas!==undefined)         S.annPetugas = res.annPetugas;
+  if(res.stock!==undefined)              { S.lastSync = Date.now(); S.syncError = false; }   /* respons berisi stok = data segar */
+  renderStock(prev!==S.stock); renderRecent(); renderAnnouncements(); renderAnnouncementAdmin(); renderSync(); saveCache();
+}
+
+/* ── LOGIN / LOGOUT ──────────── */
+function doLogin() {
+  const code=E.codeInput.value.trim(); setLoginError('');
+  if(!code){setLoginError('Kode akses harus diisi.');return;}
+  E.loginBtn.disabled=true; E.loginBtn.innerHTML = spinnerSvg(16) + ' Memuat...';
+  google.script.run
+    .withSuccessHandler(res=>{
+      E.loginBtn.disabled=false; E.loginBtn.innerHTML='Masuk';
+      if(!res||!res.ok){setLoginError((res&&res.message)||'Login gagal.');return;}
+      S.token=res.token; S.user=res.user; S.expiresAt=res.expiresAt; S.lastActivity=Date.now(); saveCache();
+      showView('main'); setMode('AMBIL');
+      if (res.stock !== undefined) applyData(res); else loadDashboard(false);   /* login sudah membawa data dashboard */
+      startIdleWatcher();
+      toast(`Masuk sebagai ${res.user.kode}`,'ok');
+    })
+    .withFailureHandler(err=>{ E.loginBtn.disabled=false; E.loginBtn.innerHTML='Masuk'; setLoginError((err&&err.message)||'Koneksi gagal.'); })
+    .login(code);
+}
+function setLoginError(msg) { E.loginError.textContent=msg; E.loginError.classList.toggle('hidden',!msg); }
+function doLogout(fromIdle=false) {
+  if(S.token) google.script.run.logout(S.token);
+  clearCache();
+  Object.assign(S,{token:null,user:null,expiresAt:0,stock:0,recent:[],month:{masuk:0,keluar:0},monthLabel:'—',qty:1,photoDataUrl:'',photoName:'',pendingDelete:null,ann:[],annAdmin:[],annPetugas:[],annSel:[],syncing:false,syncError:false,lastSync:0,flash:''});
+  if(S.idleTimer){clearInterval(S.idleTimer);S.idleTimer=null;}
+  showView('login'); E.codeInput.value=''; setLoginError('');
+  if(fromIdle) toast('Sesi berakhir. Silakan masuk lagi.');
+}
+
+/* ── DASHBOARD ───────────────── */
+function loadDashboard(silent=false) {
+  if(!S.token || S.syncing) return;
+  S.syncing = true; S.syncError = false; renderSync();
+  if(!silent){E.refreshBtn.classList.add('spinning');E.refreshBtn.disabled=true;}
+  google.script.run
+    .withSuccessHandler(res=>{
+      S.syncing = false;
+      if(!silent){E.refreshBtn.classList.remove('spinning');E.refreshBtn.disabled=false;}
+      if(!res||!res.ok){
+        if(res&&res.message==='SESSION_EXPIRED'){doLogout(true);return;}
+        S.syncError = true; renderSync();
+        if(!silent)toast((res&&res.message)||'Gagal memuat.','err');
+        return;
+      }
+      applyData(res); if(!silent)toast('Data diperbarui','ok'); setActivity();
+    })
+    .withFailureHandler(err=>{
+      S.syncing = false; S.syncError = true; renderSync();
+      if(!silent){E.refreshBtn.classList.remove('spinning');E.refreshBtn.disabled=false;toast((err&&err.message)||'Gagal memuat.','err');}
+    })
+    .getDashboardData(S.token);
+}
+
+/* ── SINKRON, JUMLAH CEPAT, SOROT ── */
+const AUTO_REFRESH_MIN_MS = 30 * 1000;   /* jeda minimal antar pembaruan otomatis */
+
+function renderSync() {
+  const busy = S.syncing, err = !busy && S.syncError;
+  E.scSyncDot.classList.toggle('sync-busy', busy);
+  E.scSyncDot.classList.toggle('sync-err', err);
+  E.scSyncLabel.classList.toggle('err', err);
+  E.scSyncLabel.textContent = busy ? 'Memperbarui…'
+    : err ? 'Gagal memperbarui · ketuk untuk ulangi'
+    : S.lastSync ? `Diperbarui ${toHHMM(new Date(S.lastSync))} ↻`
+    : 'Ketuk untuk memperbarui ↻';
+}
+
+/* Aplikasi kembali tampil (buka HP / pindah dari aplikasi lain): segarkan diam-diam bila data >30 detik. */
+function maybeAutoRefresh() {
+  if (!S.token || S.syncing) return;
+  if (Date.now() - S.lastActivity > IDLE_MS) { doLogout(true); return; }
+  if (Date.now() - S.lastSync < AUTO_REFRESH_MIN_MS) return;
+  loadDashboard(true);
+}
+
+function renderQtyChips() {
+  const presets = QTY_PRESETS[S.mode] || QTY_PRESETS.AMBIL;
+  E.qtyQuick.innerHTML = presets.map(q => `<button type="button" class="qty-chip" data-q="${q}">${q}</button>`).join('');
+  syncQtyChips();
+}
+function syncQtyChips() {
+  E.qtyQuick.querySelectorAll('.qty-chip').forEach(b => b.classList.toggle('on', Number(b.dataset.q) === S.qty));
+}
+
+/* Transaksi milik sendiri terbaru = yang baru saja disimpan (waktu input terbesar). */
+function newestOwnTxKey(list) {
+  const mine = (list || []).filter(t => S.user && t.kode === S.user.kode);
+  if (!mine.length) return '';
+  const t = mine.reduce((a, b) => String(b.timestamp) > String(a.timestamp) ? b : a);
+  return `${t.timestamp}|${t.kode}`;
+}
+function flashTx(key) { S.flash = key || ''; if (key && navigator.vibrate) navigator.vibrate(40); }
+function clearFlashLater() {
+  if (!S.flash) return;
+  setTimeout(() => {
+    S.flash = '';
+    document.querySelectorAll('.tx-flash').forEach(el => el.classList.remove('tx-flash'));
+  }, 2600);
+}
+
+/* ── SAVE TX ─────────────────── */
+function doSaveTransaction() {
+  google.script.run
+    .withSuccessHandler(res=>{
+      setSubmitState('idle');
+      if(!res||!res.ok){toast((res&&res.message)||'Gagal menyimpan.','err');return;}
+      E.noteInput.value=''; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
+      S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater(); toast(res.message||'Tersimpan!','ok'); setActivity();
+    })
+    .withFailureHandler(err=>{setSubmitState('idle');toast((err&&err.message)||'Gagal menyimpan.','err');})
+    .saveTransaction({token:S.token,type:S.mode,qty:S.qty,note:E.noteInput.value.trim(),photoDataUrl:S.mode==='DATANG'?S.photoDataUrl:'',photoName:S.photoName,txDate:S.txCustom?E.txDateInput.value:'',txTime:S.txCustom?E.txTimeInput.value:''});
+}
+
+/* ── IMAGE COMPRESS ──────────── */
+function compressImage(file,maxW=1280,q=0.72) {
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('File tidak bisa dibaca.'));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('Gambar tidak valid.'));
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+        const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(cv.toDataURL('image/jpeg',q));
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ── ADMIN ───────────────────── */
+function openAdmin() {
+  const demo=isDemo();
+  E.correctStockInput.value=''; E.correctNoteInput.value='';
+  E.warnInput.value=S.warning; E.dangerInput.value=S.danger; E.appNameInput.value=S.appName;
+  E.correctStockBtn.disabled=demo; E.correctStockBtn.textContent=demo?'🔒 Mode Demo':'Simpan Koreksi';
+  E.saveConfigBtn.disabled=demo;   E.saveConfigBtn.textContent=demo?'🔒 Mode Demo':'Simpan Setting';
+  [E.reloadConfigBtn,E.reloadTxBtn,E.reloadAllBtn].forEach(b=>{ b.disabled=demo; });
+  onAdminOpenAnnouncements(demo);
+  E.adminModal.classList.remove('hidden');
+}
+function closeAdmin() { E.adminModal.classList.add('hidden'); }
+function doCorrectStock() {
+  if(isDemo()){toast('Mode demo — tidak dapat menyimpan.','err');return;}
+  const val=E.correctStockInput.value.trim(), note=E.correctNoteInput.value.trim();
+  if(!val){toast('Isi stok aktual dulu.','err');return;}
+  if(!note){toast('Alasan koreksi wajib diisi.','err');return;}
+  E.correctStockBtn.disabled=true; E.correctStockBtn.textContent='Menyimpan…';
+  google.script.run
+    .withSuccessHandler(res=>{
+      E.correctStockBtn.disabled=false; E.correctStockBtn.textContent='Simpan Koreksi';
+      if(!res||!res.ok){toast((res&&res.message)||'Gagal.','err');return;}
+      applyData(res); toast(res.message||'Koreksi tersimpan.','ok');
+      E.correctStockInput.value=''; E.correctNoteInput.value=''; closeAdmin();
+    })
+    .withFailureHandler(err=>{ E.correctStockBtn.disabled=false; E.correctStockBtn.textContent='Simpan Koreksi'; toast((err&&err.message)||'Gagal.','err'); })
+    .correctStock(S.token,parseInt(val,10),note);
+}
+function doSaveConfig() {
+  if(isDemo()){toast('Mode demo — tidak dapat menyimpan.','err');return;}
+  E.saveConfigBtn.disabled=true; E.saveConfigBtn.textContent='Menyimpan…';
+  google.script.run
+    .withSuccessHandler(res=>{
+      E.saveConfigBtn.disabled=false; E.saveConfigBtn.textContent='Simpan Setting';
+      if(!res||!res.ok){toast((res&&res.message)||'Gagal.','err');return;}
+      applyData(res); toast(res.message||'Setting tersimpan.','ok'); closeAdmin();
+    })
+    .withFailureHandler(err=>{ E.saveConfigBtn.disabled=false; E.saveConfigBtn.textContent='Simpan Setting'; toast((err&&err.message)||'Gagal.','err'); })
+    .updateConfig(S.token,{WARNING_LEVEL:E.warnInput.value.trim(),DANGER_LEVEL:E.dangerInput.value.trim(),APP_NAME:E.appNameInput.value.trim()});
+}
+
+function runReloadCache(btn, label, fnName) {
+  if(isDemo()){toast('Mode demo — tidak dapat memuat ulang cache.','err');return;}
+  const original=btn.textContent;
+  btn.disabled=true; btn.textContent='Memuat ulang…';
+  google.script.run
+    .withSuccessHandler(res=>{
+      btn.disabled=false; btn.textContent=original;
+      if(!res||!res.ok){toast((res&&res.message)||'Gagal memuat ulang.','err');return;}
+      applyData(res); toast(res.message||`${label} dimuat ulang.`,'ok');
+    })
+    .withFailureHandler(err=>{ btn.disabled=false; btn.textContent=original; toast((err&&err.message)||'Gagal memuat ulang.','err'); })
+    [fnName](S.token);
+}
+function doReloadConfigCache()      { runReloadCache(E.reloadConfigBtn, 'Config cache',      'reloadConfigCache'); }
+function doReloadTransactionCache() { runReloadCache(E.reloadTxBtn,     'Transaction cache',  'reloadTransactionCache'); }
+function doReloadAllCache()         { runReloadCache(E.reloadAllBtn,    'Semua cache',        'reloadAllCache'); }
+
+</script>

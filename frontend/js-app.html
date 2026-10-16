@@ -1,0 +1,158 @@
+<script>
+/* ── EVENTS ──────────────────── */
+function bindEvents() {
+  E.loginBtn.addEventListener('click', doLogin);
+  E.codeInput.addEventListener('keydown', ev=>{ if(ev.key==='Enter') doLogin(); });
+
+  E.menuBtn.addEventListener('click', ()=>{ setActivity(); openMenu(); });
+  E.menuModal.addEventListener('click', ev=>{ if(ev.target===E.menuModal) closeMenu(); });
+
+  E.refreshBtn.addEventListener('click', ()=>{ closeMenu(); setActivity(); loadDashboard(false); });
+  E.logoutBtn.addEventListener('click',  ()=>{
+    closeMenu();
+    showConfirm('Keluar Aplikasi?', 'Anda harus login kembali untuk melanjutkan.', ()=>doLogout(false));
+  });
+  E.adminBtn.addEventListener('click',   ()=>{ closeMenu(); openAdmin(); });
+
+  E.modeAmbilBtn.addEventListener('click', ()=>setMode('AMBIL'));
+  E.modeDatangBtn.addEventListener('click', ()=>setMode('DATANG'));
+
+  E.minusBtn.addEventListener('click', ()=>{ S.qty=Math.max(0,S.qty-1); E.qtyInput.value=S.qty; updateSubmitText(); setActivity(); });
+  E.plusBtn.addEventListener('click',  ()=>{ S.qty=Math.min(999,S.qty+1); E.qtyInput.value=S.qty; updateSubmitText(); setActivity(); });
+  E.qtyInput.addEventListener('input', ()=>{ const v=parseInt(E.qtyInput.value,10); S.qty=(Number.isInteger(v)&&v>=0)?Math.min(999,v):0; updateSubmitText(); setActivity(); });
+  E.qtyInput.addEventListener('blur',  ()=>{ E.qtyInput.value=S.qty; });
+
+  async function handlePhotoFile(ev) {
+    const file=ev.target.files&&ev.target.files[0]; if(!file) return;
+    setActivity(); toast('Mengompres foto…');
+    try { S.photoDataUrl=await compressImage(file); S.photoName=file.name||'invoice.jpg'; renderPhotoThumb(); toast('Foto siap.','ok'); }
+    catch(err){ toast(err.message||'Gagal memproses foto.','err'); S.photoDataUrl=''; S.photoName=''; renderPhotoThumb(); }
+  }
+  E.photoInputCamera.addEventListener('change', handlePhotoFile);
+  E.photoInputGallery.addEventListener('change', handlePhotoFile);
+  E.photoCameraBtn.addEventListener('click', ()=>{ setActivity(); E.photoInputCamera.click(); });
+  E.photoGalleryBtn.addEventListener('click', ()=>{ setActivity(); E.photoInputGallery.click(); });
+  E.photoRemoveBtn.addEventListener('click', ()=>{
+    S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb(); setActivity();
+  });
+
+  E.submitBtn.addEventListener('click', handleSubmitTap);
+
+  /* Jumlah cepat */
+  E.qtyQuick.addEventListener('click', ev=>{
+    const b = ev.target.closest('.qty-chip'); if (!b) return;
+    S.qty = parseInt(b.dataset.q, 10); E.qtyInput.value = S.qty; updateSubmitText(); setActivity();
+  });
+
+  /* Sinkron: ketuk label untuk memperbarui; otomatis saat aplikasi kembali tampil */
+  E.scSync.addEventListener('click', ()=>{ setActivity(); loadDashboard(false); });
+  document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') maybeAutoRefresh(); });
+  window.addEventListener('focus', maybeAutoRefresh);
+
+  E.timeEditBtn.addEventListener('click', openTxWhenEdit);
+  E.timeResetBtn.addEventListener('click', ()=>{ resetTxWhen(); setActivity(); });
+
+
+  /* Monthly table */
+  E.monthlyBtn.addEventListener('click', openMonthlyTable);
+
+  /* Riwayat Lengkap */
+  E.historyBtn.addEventListener('click', ()=>openHistory(false));
+  E.myHistoryBtn.addEventListener('click', ()=>openHistory(true));
+  E.historyCloseBtn.addEventListener('click', closeHistory);
+  E.historyModal.addEventListener('click', ev=>{ if(ev.target===E.historyModal) closeHistory(); });
+  E.mtPickerCloseBtn.addEventListener('click', closeMonthlyTable);
+  E.mtRenderBtn.addEventListener('click', renderFromPicker);
+
+  E.mtCloseBtn.addEventListener('click', closeMonthlyTable);
+  E.mtExportPdfBtn.addEventListener('click', exportMonthlyPdf);
+  E.mtExportExcelBtn.addEventListener('click', exportMonthlyCsv);
+  E.monthlyModal.addEventListener('click', ev=>{ if(ev.target===E.monthlyModal) closeMonthlyTable(); });
+  E.mtPrevBtn.addEventListener('click', ()=> stepReportMonth(-1));
+  E.mtNextBtn.addEventListener('click', ()=> stepReportMonth(1));
+
+  /* Admin modal */
+  E.correctStockBtn.addEventListener('click', doCorrectStock);
+  E.saveConfigBtn.addEventListener('click',   doSaveConfig);
+  E.reloadConfigBtn.addEventListener('click', doReloadConfigCache);
+  E.reloadTxBtn.addEventListener('click',     doReloadTransactionCache);
+  E.reloadAllBtn.addEventListener('click',    doReloadAllCache);
+  E.closeAdminBtn.addEventListener('click',   closeAdmin);
+  E.adminModal.addEventListener('click', ev=>{ if(ev.target===E.adminModal) closeAdmin(); });
+
+  /* Delete modal */
+  E.confirmDeleteBtn.addEventListener('click', doDeleteTransaction);
+  E.cancelDeleteBtn.addEventListener('click',  closeDeleteModal);
+  E.deleteModal.addEventListener('click', ev=>{ if(ev.target===E.deleteModal) closeDeleteModal(); });
+  E.openEditBtn.addEventListener('click', ()=>{ const tx=S.pendingDelete; closeDeleteModal(); if(tx) openEditModal(tx); });
+
+  /* Edit modal */
+  E.editMinusBtn.addEventListener('click', ()=>stepEditQty(-1));
+  E.editPlusBtn.addEventListener('click',  ()=>stepEditQty(1));
+  E.editQtyInput.addEventListener('input', updateEditPreview);
+  E.saveEditBtn.addEventListener('click',  doEditTransaction);
+  E.cancelEditBtn.addEventListener('click', closeEditModal);
+  E.editModal.addEventListener('click', ev=>{ if(ev.target===E.editModal) closeEditModal(); });
+
+  /* Pengumuman (admin) */
+  A.tplBtn.addEventListener('click',  fillAnnTemplate);
+  A.sendBtn.addEventListener('click', sendAnnouncement);
+
+  /* Confirm modal (generik) */
+  E.confirmYesBtn.addEventListener('click', ()=>{ const cb=_confirmCallback; hideConfirm(); if (cb) cb(); });
+  E.confirmNoBtn.addEventListener('click',  hideConfirm);
+  E.confirmModal.addEventListener('click', ev=>{ if(ev.target===E.confirmModal) hideConfirm(); });
+
+  /* Activity */
+  ['pointerdown','keydown','touchstart'].forEach(ev=>{
+    document.addEventListener(ev, ()=>{ if(S.token) setActivity(); }, { passive:true });
+  });
+}
+
+/* ── KEYBOARD-AWARE SCROLL (mirip FB: input naik otomatis di atas keyboard) ── */
+function scrollFieldAboveKeyboard(el) {
+  if (!el) return;
+  const doScroll = () => {
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(_) {}
+  };
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const onResize = () => { doScroll(); vv.removeEventListener('resize', onResize); };
+    vv.addEventListener('resize', onResize);
+    /* Fallback: kalau event resize tidak terpicu (browser lama), tetap scroll setelah animasi keyboard */
+    setTimeout(doScroll, 350);
+  } else {
+    setTimeout(doScroll, 350);
+  }
+}
+function bindKeyboardAwareScroll() {
+  document.addEventListener('focusin', ev => {
+    const el = ev.target;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+      scrollFieldAboveKeyboard(el);
+    }
+  });
+}
+
+/* ── INIT ────────────────────── */
+function init() {
+  bindEvents();
+  bindKeyboardAwareScroll();
+  updateClock();
+  const cache = loadCache();
+  if (!cache||!cache.token||!cache.expiresAt||Date.now()>cache.expiresAt) {
+    clearCache(); showView('login'); setTimeout(()=>E.codeInput.focus(),80); return;
+  }
+  Object.assign(S, {
+    token:cache.token, user:cache.user, expiresAt:cache.expiresAt,
+    lastActivity:cache.lastActivity||Date.now(),
+    stock:cache.stock||0, warning:cache.warning||20, danger:cache.danger||10,
+    appName:cache.appName||'Galon App', status:cache.status||'safe',
+    recent:cache.recent||[], month:cache.month||{masuk:0,keluar:0}, monthLabel:cache.monthLabel||'—', ann:cache.ann||[], lastSync:cache.lastSync||0,
+  });
+  showView('main'); setMode('AMBIL');
+  renderStock(false); renderRecent(); renderAnnouncements(); startIdleWatcher();
+  loadDashboard(true);
+}
+init();
+</script>

@@ -1,0 +1,135 @@
+<script>
+/* ── PENGUMUMAN (banner petugas + panel admin) ── */
+const A = {
+  list: $('annList'), tipe: $('annTipe'), days: $('annDays'), chips: $('annChips'),
+  pesan: $('annPesan'), tplBtn: $('annTemplateBtn'), sendBtn: $('annSendBtn'), adminList: $('annAdminList'),
+};
+
+function renderAnnouncements() {
+  const shown = (S.ann || []).filter(a => !a.dibaca);   /* dibaca = status dari server */
+  A.list.innerHTML = '';
+  if (!shown.length) { A.list.classList.add('hidden'); return; }
+  shown.forEach(a => {
+    const warn = a.tipe === 'PERINGATAN';
+    const div = document.createElement('div');
+    div.className = `ann-item ${warn ? 'warn' : 'info'}`;
+    div.innerHTML =
+      `<div class="ann-body">` +
+        `<div class="ann-title">${warn ? '⚠ Peringatan' : '📢 Pengumuman'} · Admin · ${esc(formatDicatat(a.createdAt))}</div>` +
+        `<div class="ann-text">${esc(a.pesan)}</div>` +
+      `</div><button type="button" class="ann-ok">Mengerti</button>`;
+    div.querySelector('.ann-ok').addEventListener('click', () => markAnnRead(a));
+    A.list.appendChild(div);
+  });
+  A.list.classList.remove('hidden');
+}
+
+/* Banner langsung hilang (optimistis); bila server gagal, banner dikembalikan. */
+function markAnnRead(a) {
+  a.dibaca = true; renderAnnouncements(); saveCache(); setActivity();
+  if (isDemo()) return;   /* demo hanya melihat: tidak menulis ke server */
+  const revert = msg => { a.dibaca = false; renderAnnouncements(); saveCache(); toast(msg || 'Gagal menandai dibaca.','err'); };
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res && res.ok) return;
+      if (res && res.message === 'SESSION_EXPIRED') { doLogout(true); return; }
+      if (res && /tidak aktif/.test(res.message||'')) { S.ann = S.ann.filter(x => x.id !== a.id); renderAnnouncements(); saveCache(); return; }
+      revert(res && res.message);
+    })
+    .withFailureHandler(err => revert(err && err.message))
+    .markAnnouncementRead(S.token, a.id);
+}
+
+/* ── Panel admin ── */
+function fmtExp(ms) { const d = new Date(ms); return `${pad2(d.getDate())} ${BULAN_SHORT_ID[d.getMonth()+1]} ${toHHMM(d)}`; }
+
+function renderAnnouncementAdmin() {
+  A.chips.innerHTML = '';
+  (S.annPetugas || []).forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ann-chip' + (S.annSel.includes(p.kode) ? ' on' : '');
+    b.textContent = p.nama;
+    b.addEventListener('click', () => {
+      S.annSel = S.annSel.includes(p.kode) ? S.annSel.filter(k => k !== p.kode) : S.annSel.concat(p.kode);
+      renderAnnouncementAdmin();
+    });
+    A.chips.appendChild(b);
+  });
+
+  A.adminList.innerHTML = '';
+  const list = S.annAdmin || [];
+  if (!list.length) { A.adminList.innerHTML = '<div class="admin-current">Belum ada pengumuman aktif.</div>'; return; }
+  list.forEach(a => {
+    const warn = a.tipe === 'PERINGATAN';
+    const dibaca = a.dibaca || [], belum = a.belum || [];
+    const div = document.createElement('div');
+    div.className = 'ann-admin-item';
+    div.innerHTML =
+      `<div class="ann-admin-meta"><span>${warn ? '⚠ Peringatan' : '📢 Info'} · ${esc(a.targetLabel)}</span><span>s/d ${esc(fmtExp(a.expiresAt))}</span></div>` +
+      `<div class="ann-admin-text">${esc(a.pesan)}</div>` +
+      `<div class="ann-admin-read ${belum.length ? '' : 'done'}">👁 Dibaca ${dibaca.length} dari ${dibaca.length + belum.length}${belum.length ? ' · belum: ' + esc(belum.map(p => p.nama).join(', ')) : ' · semua sudah membaca ✓'}</div>` +
+      `<button type="button" class="ann-admin-off">Nonaktifkan</button>`;
+    div.querySelector('.ann-admin-off').addEventListener('click', ev => doDeactivateAnn(a.id, ev.currentTarget));
+    A.adminList.appendChild(div);
+  });
+}
+
+function onAdminOpenAnnouncements(demo) {
+  A.pesan.value = ''; A.tipe.value = 'INFO'; A.days.value = '3'; S.annSel = [];
+  A.sendBtn.disabled = demo; A.tplBtn.disabled = demo;
+  A.sendBtn.textContent = demo ? '🔒 Mode Demo' : 'Kirim Pengumuman';
+  renderAnnouncementAdmin();
+  if (!demo) loadDashboard(true);   /* segarkan status baca terbaru (dashboard di-cache, ringan) */
+}
+
+function fillAnnTemplate() {
+  A.pesan.value = `Stok fisik tidak cocok dengan catatan sistem (tercatat: ${S.stock} galon). Mohon cek dan segera catat transaksi yang terlewat (ambil / galon datang).`;
+  A.tipe.value = 'PERINGATAN';
+  setActivity();
+}
+
+function sendAnnouncement() {
+  if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
+  const pesan = A.pesan.value.trim();
+  if (!pesan) { toast('Isi pengumuman dulu.','err'); return; }
+  const target = S.annSel.length ? S.annSel : 'ALL';
+  const tujuan = S.annSel.length
+    ? (S.annPetugas || []).filter(p => S.annSel.includes(p.kode)).map(p => p.nama).join(', ')
+    : 'semua petugas';
+  const days = parseInt(A.days.value, 10);
+
+  showConfirm('Kirim Pengumuman?', `Akan tampil ke ${tujuan} selama ${days} hari.`, () => {
+    A.sendBtn.disabled = true; A.sendBtn.innerHTML = spinnerSvg(16) + ' Mengirim…';
+    const reset = () => { A.sendBtn.disabled = false; A.sendBtn.textContent = 'Kirim Pengumuman'; };
+    google.script.run
+      .withSuccessHandler(res => {
+        reset();
+        if (!res || !res.ok) {
+          if (res && res.message === 'SESSION_EXPIRED') { closeAdmin(); doLogout(true); return; }
+          toast((res && res.message) || 'Gagal mengirim.','err'); return;
+        }
+        A.pesan.value = ''; S.annSel = [];
+        applyData(res); toast(res.message || 'Pengumuman terkirim.','ok'); setActivity();
+      })
+      .withFailureHandler(err => { reset(); toast((err && err.message) || 'Gagal mengirim.','err'); })
+      .createAnnouncement(S.token, { pesan, tipe: A.tipe.value, days, target });
+  });
+}
+
+function doDeactivateAnn(id, btn) {
+  if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
+  btn.disabled = true; btn.textContent = 'Memproses…';
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || !res.ok) {
+        btn.disabled = false; btn.textContent = 'Nonaktifkan';
+        if (res && res.message === 'SESSION_EXPIRED') { closeAdmin(); doLogout(true); return; }
+        toast((res && res.message) || 'Gagal.','err'); return;
+      }
+      applyData(res); toast(res.message || 'Pengumuman dinonaktifkan.','ok'); setActivity();
+    })
+    .withFailureHandler(err => { btn.disabled = false; btn.textContent = 'Nonaktifkan'; toast((err && err.message) || 'Gagal.','err'); })
+    .deactivateAnnouncement(S.token, id);
+}
+</script>

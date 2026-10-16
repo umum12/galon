@@ -1,0 +1,67 @@
+<script>
+/* ── RIWAYAT LENGKAP & RIWAYAT SAYA (2 minggu, edit/hapus lewat tekan & tahan) ──
+   Satu modal, dua mode: mine=false → semua orang; mine=true → hanya milik pengguna (disaring di server). */
+const HIST = { loading: false, items: [], days: 14, mine: false };
+
+function isHistoryOpen() { return !E.historyModal.classList.contains('hidden'); }
+
+function openHistory(mine) {
+  setActivity();
+  HIST.mine = mine === true;
+  HIST.items = [];
+  E.historyTitle.textContent = HIST.mine ? '👤 Riwayat Saya' : '🕘 Riwayat Lengkap';
+  E.historyScroll.scrollTop = 0;
+  E.historyModal.classList.remove('hidden');
+  fetchFullHistory(false);
+}
+function closeHistory() { E.historyModal.classList.add('hidden'); }
+
+/* keepScroll=true: dipanggil setelah edit/hapus — daftar disegarkan tanpa loncat ke atas. */
+function fetchFullHistory(keepScroll) {
+  if (HIST.loading) return;
+  HIST.loading = true;
+  if (!keepScroll) {
+    E.historyLoading.classList.remove('hidden');
+    E.historyList.classList.add('hidden');
+    E.historyEmpty.classList.add('hidden');
+  }
+  google.script.run
+    .withSuccessHandler(res => {
+      HIST.loading = false;
+      E.historyLoading.classList.add('hidden');
+      if (!res || !res.ok) {
+        if (res && res.message === 'SESSION_EXPIRED') { closeHistory(); doLogout(true); return; }
+        toast((res && res.message) || 'Gagal memuat riwayat.','err'); return;
+      }
+      HIST.items = res.items || [];
+      HIST.days  = res.days || 14;
+      renderHistory();
+    })
+    .withFailureHandler(err => {
+      HIST.loading = false;
+      E.historyLoading.classList.add('hidden');
+      toast((err && err.message) || 'Gagal memuat riwayat.','err');
+    })
+    .getTransactionHistory(S.token, HIST.mine);
+}
+
+function renderHistory() {
+  const items = HIST.items;
+  E.historySub.textContent = HIST.mine
+    ? `${HIST.days} hari terakhir · ${items.length} transaksi milik Anda · ketuk ⋯ untuk edit atau hapus`
+    : `${HIST.days} hari terakhir · ${items.length} transaksi · ketuk ⋯ untuk edit atau hapus`;
+  E.historyEmpty.textContent = HIST.mine
+    ? `Belum ada transaksi Anda dalam ${HIST.days} hari terakhir.`
+    : `Tidak ada transaksi dalam ${HIST.days} hari terakhir.`;
+  if (!items.length) {
+    E.historyList.classList.add('hidden');
+    E.historyEmpty.classList.remove('hidden');
+    return;
+  }
+  E.historyEmpty.classList.add('hidden');
+  const top = E.historyScroll.scrollTop;
+  renderTxList(E.historyList, items, HIST.mine);
+  E.historyList.classList.remove('hidden');
+  E.historyScroll.scrollTop = top;
+}
+</script>

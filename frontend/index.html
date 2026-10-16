@@ -1,1 +1,402 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Galon App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <?!= include('styles'); ?>
+</head>
+<body>
+<div class="app">
 
+  <!-- LOGIN -->
+  <div id="loginView" class="login-view">
+    <div class="login-card">
+      <div class="login-brand">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="login-logo" width="76" height="76" role="img" aria-label="Galon App"><defs><linearGradient id="lgBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#1E3A8A"/></linearGradient><linearGradient id="lgWt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#BFDBFE"/><stop offset="1" stop-color="#60A5FA"/></linearGradient><clipPath id="lgJug"><path d="M222 142H290V170C290 190 340 192 340 232V372C340 394 324 410 302 410H210C188 410 172 394 172 372V232C172 192 222 190 222 170Z"/></clipPath></defs><rect width="512" height="512" rx="112" fill="url(#lgBg)"/><g transform="translate(256 256) scale(1.08) translate(-256 -261) translate(-26 0)"><rect x="208" y="112" width="96" height="30" rx="9" fill="#fff"/><path d="M338 238C386 238 386 308 338 308" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/><path d="M222 142H290V170C290 190 340 192 340 232V372C340 394 324 410 302 410H210C188 410 172 394 172 372V232C172 192 222 190 222 170Z" fill="#fff"/><g clip-path="url(#lgJug)"><path d="M150 284C184 262 220 262 256 284S328 306 362 284V440H150Z" fill="url(#lgWt)"/></g><rect x="188" y="252" width="12" height="96" rx="6" fill="#fff" opacity=".5"/></g></svg>
+        <div class="login-title">Galon App</div>
+        <div class="login-sub">Pantau & catat stok galon dengan cepat</div>
+      </div>
+      <div>
+        <label class="field-label" for="codeInput">Kode Akses</label>
+        <input id="codeInput" class="login-code" type="text" placeholder="Ketik kode…"
+          autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text"/>
+      </div>
+      <button class="btn btn-primary btn-block" id="loginBtn" style="font-size:17px;padding:15px;">Masuk</button>
+      <div class="login-error hidden" id="loginError"></div>
+      <div class="login-hint">Sesi berakhir otomatis setelah 30 menit tidak ada aktivitas.</div>
+      <div class="login-demo-hint">Ingin mencoba? Ketik <strong>DEMO</strong> untuk masuk.</div>
+    </div>
+  </div>
+
+  <!-- MAIN VIEW -->
+  <div id="mainView" class="hidden">
+
+    <!-- STOCK CARD -->
+    <div class="stock-card safe" id="stockCard">
+      <div class="sc-topbar">
+        <div class="sc-brand">
+          <span class="sc-brand-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 3h6a1 1 0 0 1 1 1v1h1a1 1 0 0 1 1 1v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1h1V4a1 1 0 0 1 1-1Z"/>
+              <path d="M9 3v3h6V3"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="14.5" x2="16" y2="14.5"/><line x1="8" y1="18" x2="13" y2="18"/>
+            </svg>
+          </span>
+          <div class="sc-brand-text">
+            <div class="sc-brand-title" id="scAppName">Galon App</div>
+            <div class="sc-brand-sub" id="scClock">—</div>
+          </div>
+        </div>
+        <div class="sc-topbar-right">
+          <button class="sc-menu-btn" id="menuBtn" title="Menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+            </svg>
+          </button>
+          <div class="sc-userblock">
+            <div class="sc-nama" id="scNama">—</div>
+            <div class="sc-role" id="scRole">—</div>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="sc-sync" id="scSync" title="Ketuk untuk memperbarui data">
+        <span class="sc-online-dot" id="scSyncDot"></span>
+        <span class="sc-online-label" id="scSyncLabel">Memuat…</span>
+      </button>
+      <div class="sc-numwrap">
+        <div class="stock-number" id="stockNumber">0</div>
+        <div class="sc-unit" id="scUnit">Galon Tersisa</div>
+      </div>
+      <div class="sc-status-row">
+        <div class="sc-status-pill" id="stockStatusPill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z"/>
+          </svg>
+          <span id="stockStatusText">AMAN</span>
+        </div>
+      </div>
+      <div class="sc-stats">
+        <div class="stat-chip masuk">
+          <span class="stat-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg>
+          </span>
+          <span class="stat-text">
+            <span class="stat-label" id="statMasukLabel">—</span>
+            <span class="stat-value" id="statMasuk">0</span>
+          </span>
+        </div>
+        <div class="stat-chip keluar">
+          <span class="stat-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>
+          </span>
+          <span class="stat-text">
+            <span class="stat-label" id="statKeluarLabel">—</span>
+            <span class="stat-value" id="statKeluar">0</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PENGUMUMAN (banner dari admin) -->
+    <div class="ann-list hidden" id="annList"></div>
+
+    <!-- FORM CARD -->
+    <div class="form-card" id="formCard">
+      <div class="demo-notice hidden" id="demoNotice">🔒 Mode Demo — tidak dapat menyimpan transaksi</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active ambil" id="modeAmbilBtn">− Ambil</button>
+        <button class="mode-btn datang"       id="modeDatangBtn">+ Datang</button>
+      </div>
+      <div class="qty-row">
+        <button class="qty-side" id="minusBtn">−</button>
+        <input class="qty-field" id="qtyInput" type="number" value="0" min="0" max="999" inputmode="numeric"/>
+        <button class="qty-side" id="plusBtn">+</button>
+      </div>
+      <div class="qty-quick" id="qtyQuick"></div>
+      <input class="note-field" id="noteInput" type="text" placeholder="Catatan (opsional)" maxlength="200" autocomplete="off"/>
+      <div class="time-row" id="timeRow">
+        <div class="time-now" id="timeNowView">
+          <span class="time-label">🕒 Waktu transaksi: <strong>Sekarang</strong></span>
+          <button type="button" class="time-link" id="timeEditBtn">Ubah waktu</button>
+        </div>
+        <div class="time-edit hidden" id="timeEditView">
+          <div class="time-edit-hdr">
+            <span class="time-label">🕒 Waktu kejadian <span class="time-hint">(maks. 2 minggu ke belakang)</span></span>
+            <button type="button" class="time-link" id="timeResetBtn">Pakai sekarang</button>
+          </div>
+          <div class="time-inputs">
+            <input class="t-input" id="txDateInput" type="date">
+            <input class="t-input" id="txTimeInput" type="time">
+          </div>
+        </div>
+      </div>
+      <div class="hidden" id="photoSection">
+        <div class="photo-box">
+          <div class="photo-thumb" id="photoThumb">📷 Pilih sumber foto invoice di bawah</div>
+          <button type="button" class="photo-remove hidden" id="photoRemoveBtn" title="Hapus foto">✕</button>
+        </div>
+        <div class="photo-source-row">
+          <button type="button" class="photo-source-btn" id="photoCameraBtn">📷 Kamera</button>
+          <button type="button" class="photo-source-btn" id="photoGalleryBtn">🖼 Galeri</button>
+        </div>
+        <input type="file" id="photoInputCamera" accept="image/*" capture="environment">
+        <input type="file" id="photoInputGallery" accept="image/*">
+      </div>
+      <button class="submit-btn" id="submitBtn" data-state="idle" data-mode="AMBIL">Kirim</button>
+    </div>
+
+    <!-- HISTORY CARD -->
+    <div class="history-card">
+      <div class="history-hdr">
+        <span class="tx-count-badge" id="txCountBadge">0 TRANSAKSI TERAKHIR</span>
+        <button type="button" class="hist-mine-btn" id="myHistoryBtn">Riwayat Saya</button>
+      </div>
+      <div class="history-hint">Ketuk ⋯ (atau tekan &amp; tahan) pada transaksi untuk edit atau hapus.</div>
+      <div  class="tx-list"  id="txList"></div>
+      <div  class="tx-empty hidden" id="txEmpty">Belum ada transaksi.</div>
+    </div>
+
+    <!-- AKSI BAWAH: Laporan Bulanan · Riwayat Lengkap -->
+    <div class="bottom-actions">
+      <button class="bottom-btn" id="monthlyBtn"><span class="bb-icon">📊</span> Laporan Bulanan</button>
+      <button class="bottom-btn" id="historyBtn"><span class="bb-icon">🕘</span> Riwayat Lengkap</button>
+    </div>
+
+  </div><!-- /mainView -->
+</div><!-- /app -->
+
+<!-- MENU OVERFLOW MODAL (Refresh / Admin / Logout) -->
+<div id="menuModal" class="modal-backdrop hidden">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Menu</div>
+    <div class="menu-list">
+      <button class="menu-item" id="refreshBtn">
+        <span class="mi-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </span>
+        Refresh Data
+      </button>
+      <button class="menu-item hidden" id="adminBtn">
+        <span class="mi-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </span>
+        Panel Admin
+      </button>
+      <button class="menu-item mi-danger" id="logoutBtn">
+        <span class="mi-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </span>
+        Keluar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN MODAL -->
+<div id="adminModal" class="modal-backdrop hidden">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">⚙ Panel Admin</div>
+    <div class="admin-block">
+      <div class="admin-block-title">Koreksi Stok</div>
+      <div class="admin-block-desc">Untuk stock opname. Input jumlah galon <strong>hasil hitung fisik aktual</strong> (boleh lebih atau kurang dari catatan sistem). Selisihnya otomatis tercatat sebagai KOREKSI dan tampil di kolom (±) pada Tabel Bulanan.</div>
+      <div class="admin-row">
+        <input class="t-input" id="correctStockInput" type="number" placeholder="Stok aktual" min="0" inputmode="numeric" style="flex:0 0 110px;">
+        <input class="t-input" id="correctNoteInput"  type="text"   placeholder="Alasan koreksi (wajib)" maxlength="200">
+      </div>
+      <button class="btn btn-purple btn-block" id="correctStockBtn">Simpan Koreksi</button>
+    </div>
+    <div class="admin-block">
+      <div class="admin-block-title">📢 Pengumuman</div>
+      <div class="admin-block-desc">Pengingat yang tampil sebagai banner di aplikasi petugas, hilang otomatis saat masa berlaku habis. Petugas menutupnya dengan tombol "Mengerti"; status baca tiap petugas tampil di daftar di bawah.</div>
+      <div class="admin-row">
+        <div class="admin-field"><label>TIPE</label><select class="t-input" id="annTipe"><option value="INFO">Info</option><option value="PERINGATAN">Peringatan</option></select></div>
+        <div class="admin-field"><label>BERLAKU</label><select class="t-input" id="annDays"><option value="1">1 hari</option><option value="3" selected>3 hari</option><option value="7">7 hari</option><option value="14">14 hari</option></select></div>
+      </div>
+      <div class="admin-field"><label>TUJUAN <span class="time-hint">(tidak dipilih = semua petugas)</span></label><div class="ann-chips" id="annChips"></div></div>
+      <textarea class="t-input ann-textarea" id="annPesan" maxlength="300" rows="3" placeholder="Tulis pengumuman… (maks. 300 karakter)"></textarea>
+      <button type="button" class="btn btn-ghost btn-block" id="annTemplateBtn">📝 Isi templat: stok tidak cocok</button>
+      <button type="button" class="btn btn-primary btn-block" id="annSendBtn">Kirim Pengumuman</button>
+      <div class="ann-admin-list" id="annAdminList"></div>
+    </div>
+    <div class="admin-block">
+      <div class="admin-block-title">Setting</div>
+      <div class="admin-row">
+        <div class="admin-field"><label>⚠ Warning (≤ galon)</label><input class="t-input" id="warnInput"   type="number" min="0" inputmode="numeric"></div>
+        <div class="admin-field"><label>🔴 Danger (≤ galon)</label><input class="t-input" id="dangerInput" type="number" min="0" inputmode="numeric"></div>
+      </div>
+      <div class="admin-field"><label>Nama Aplikasi</label><input class="t-input" id="appNameInput" type="text" maxlength="40"></div>
+      <button class="btn btn-primary btn-block" id="saveConfigBtn">Simpan Setting</button>
+    </div>
+    <div class="admin-block">
+      <div class="admin-block-title">Maintenance</div>
+      <div class="admin-block-desc">Cache dipakai untuk mempercepat aplikasi (bertahan hingga 6 jam). Jika ada perubahan yang diedit langsung di Google Sheets (bukan lewat aplikasi ini), muat ulang cache di sini agar datanya langsung sinkron.</div>
+      <button class="btn btn-ghost btn-block" id="reloadConfigBtn">🔄 Reload Config Cache</button>
+      <button class="btn btn-ghost btn-block" id="reloadTxBtn">🔄 Reload Transaction Cache</button>
+      <button class="btn btn-purple btn-block" id="reloadAllBtn">🔄 Reload Semua Cache</button>
+    </div>
+    <div class="admin-current">Stok tercatat: <strong id="adminStockInfo">—</strong></div>
+    <button class="btn btn-ghost btn-block" id="closeAdminBtn">Tutup</button>
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div id="deleteModal" class="modal-backdrop hidden">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Kelola Transaksi</div>
+    <div class="delete-card">
+      <div class="delete-nama" id="deleteNama">—</div>
+      <div class="delete-meta" id="deleteMeta">—</div>
+    </div>
+    <div class="delete-stock" id="deleteStockPreview">Stok: — → —</div>
+    <button class="btn btn-primary btn-block" id="openEditBtn">✏ Edit Transaksi</button>
+    <button class="btn btn-danger btn-block" id="confirmDeleteBtn">🗑 Hapus Transaksi</button>
+    <button class="btn btn-ghost  btn-block" id="cancelDeleteBtn">Batal</button>
+  </div>
+</div>
+
+<!-- RIWAYAT LENGKAP MODAL (2 minggu, bisa edit/hapus) -->
+<div id="historyModal" class="history-backdrop hidden">
+  <div class="history-sheet">
+    <div class="mt-header">
+      <div class="mt-title" id="historyTitle">🕘 Riwayat Lengkap</div>
+      <button class="mt-close" id="historyCloseBtn">✕</button>
+    </div>
+    <div class="history-sub" id="historySub">2 minggu terakhir · ketuk ⋯ untuk edit atau hapus</div>
+    <div class="history-scroll" id="historyScroll">
+      <div class="mt-loading" id="historyLoading">⏳ Memuat data…</div>
+      <div class="tx-list hidden" id="historyList"></div>
+      <div class="tx-empty hidden" id="historyEmpty">Tidak ada transaksi dalam 2 minggu terakhir.</div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="editModal" class="modal-backdrop hidden">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Edit Transaksi</div>
+    <div class="delete-card">
+      <div class="delete-nama" id="editNama">—</div>
+      <div class="delete-meta" id="editMeta">—</div>
+    </div>
+    <div class="admin-field">
+      <label>JUMLAH (GALON)</label>
+      <div class="qty-row">
+        <button type="button" class="qty-side" id="editMinusBtn">−</button>
+        <input class="qty-field" id="editQtyInput" type="number" value="1" min="1" max="999" inputmode="numeric"/>
+        <button type="button" class="qty-side" id="editPlusBtn">+</button>
+      </div>
+    </div>
+    <div class="admin-field">
+      <label>CATATAN</label>
+      <input class="t-input" id="editNoteInput" type="text" maxlength="200" placeholder="Catatan (opsional)" autocomplete="off">
+    </div>
+    <div class="admin-field">
+      <label>WAKTU KEJADIAN <span class="time-hint">(maks. 2 minggu ke belakang)</span></label>
+      <div class="time-inputs" style="padding-bottom:0;">
+        <input class="t-input" id="editDateInput" type="date">
+        <input class="t-input" id="editTimeInput" type="time">
+      </div>
+    </div>
+    <div class="delete-stock" id="editStockPreview">—</div>
+    <button class="btn btn-primary btn-block" id="saveEditBtn">Simpan Perubahan</button>
+    <button class="btn btn-ghost  btn-block" id="cancelEditBtn">Batal</button>
+  </div>
+</div>
+
+<!-- CONFIRM MODAL (generik: Kirim, Logout, dst — tampil di tengah layar) -->
+<div id="confirmModal" class="modal-backdrop center hidden">
+  <div class="modal-sheet center">
+    <div class="sheet-title" id="confirmTitle">Konfirmasi</div>
+    <div class="confirm-msg" id="confirmMessage">—</div>
+    <button class="btn btn-primary btn-block" id="confirmYesBtn">Ya</button>
+    <button class="btn btn-ghost  btn-block" id="confirmNoBtn">Batal</button>
+  </div>
+</div>
+
+<!-- MONTHLY TABLE MODAL -->
+<div id="monthlyModal" class="monthly-backdrop hidden">
+  <div class="monthly-sheet">
+
+    <!-- LAYAR A: PICKER (dropdown Bulan & Tahun) -->
+    <div class="mt-picker-screen" id="mtPickerScreen">
+      <div class="mt-picker-card">
+        <div class="mt-picker-head">
+          <div class="mt-picker-heading">Laporan Bulanan</div>
+          <button class="mt-close" id="mtPickerCloseBtn">✕</button>
+        </div>
+        <div class="mt-picker-fields">
+          <div class="mt-field">
+            <label for="mtMonthSel">Bulan</label>
+            <select class="mt-select" id="mtMonthSel"></select>
+          </div>
+          <div class="mt-field">
+            <label for="mtYearSel">Tahun</label>
+            <select class="mt-select" id="mtYearSel"></select>
+          </div>
+        </div>
+        <button class="btn-render" id="mtRenderBtn">Render Laporan</button>
+      </div>
+    </div>
+
+    <!-- LAYAR B: LAPORAN -->
+    <div class="mt-report-screen hidden" id="mtReportScreen">
+
+      <!-- Fixed header -->
+      <div class="mt-header">
+        <button class="mt-nav" id="mtPrevBtn">‹</button>
+        <div class="mt-title" id="mtTitle">—</div>
+        <button class="mt-nav" id="mtNextBtn">›</button>
+        <div class="mt-export-btns">
+          <button class="mt-nav" id="mtExportPdfBtn" title="Export PDF">📄</button>
+          <button class="mt-nav" id="mtExportExcelBtn" title="Export Excel">📊</button>
+        </div>
+        <button class="mt-close" id="mtCloseBtn">✕</button>
+      </div>
+
+      <!-- Judul khusus saat print (tersembunyi di layar) -->
+      <div class="mt-print-title" id="mtPrintTitle"></div>
+
+      <!-- Info bar: sisa awal, masuk, keluar, koreksi, sisa akhir -->
+      <div class="mt-info hidden" id="mtInfo"></div>
+
+      <!-- Loading -->
+      <div class="mt-loading" id="mtLoading">⏳ Memuat data…</div>
+
+      <!-- Table -->
+      <div class="mt-wrap hidden" id="mtWrap"></div>
+
+      <!-- Catatan Koreksi Stok (stock opname) -->
+      <div class="mt-koreksi-notes hidden" id="mtKoreksiNotes"></div>
+
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<?!= include('js-core'); ?>
+<?!= include('js-stock'); ?>
+<?!= include('js-monthly'); ?>
+<?!= include('js-history'); ?>
+<?!= include('js-actions'); ?>
+<?!= include('js-announce'); ?>
+<?!= include('js-app'); ?>
+</body>
+</html>
