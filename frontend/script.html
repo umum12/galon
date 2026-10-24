@@ -5,7 +5,6 @@
 const CACHE_KEY     = 'galon_v2';
 const IDLE_MS       = 30 * 60 * 1000;
 const LONG_PRESS_MS = 500;
-const QTY_PRESETS = { AMBIL: [1,2,3,5], DATANG: [5,10,15,20] };   /* tombol jumlah cepat */
 const MAX_BACKDATE_DAYS = 14;  /* 2 minggu — harus sama dengan BACKDATE_MAX_DAYS di Code.gs */
 
 const HARI_ID  = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
@@ -50,7 +49,7 @@ const E = {
   statMasukLabel: $('statMasukLabel'), statKeluarLabel: $('statKeluarLabel'),
   formCard: $('formCard'), demoNotice: $('demoNotice'),
   scUnit: $('scUnit'), scAvatar: $('scAvatar'), stockStatusIcon: $('stockStatusIcon'), menuAvatar: $('menuAvatar'), menuNama: $('menuNama'), menuRole: $('menuRole'),
-  scSync: $('scSync'), scSyncDot: $('scSyncDot'), scSyncLabel: $('scSyncLabel'), qtyQuick: $('qtyQuick'),
+  scSync: $('scSync'), scSyncDot: $('scSyncDot'), scSyncLabel: $('scSyncLabel'),
   timeNowView: $('timeNowView'), timeEditView: $('timeEditView'),
   timeEditBtn: $('timeEditBtn'), timeResetBtn: $('timeResetBtn'),
   txDateInput: $('txDateInput'), txTimeInput: $('txTimeInput'),
@@ -196,11 +195,11 @@ function showView(v) {
 
 /* ── TOAST ───────────────────── */
 let _tT = null;
-function toast(msg, type='') {
+function toast(msg, type='', ms) {
   if (_tT) clearTimeout(_tT);
   E.toast.innerHTML = ic(type==='ok' ? 'check_circle' : type==='err' ? 'error' : 'info', 'ms-20') + `<span class="toast-msg">${esc(msg)}</span>`;
   E.toast.className = 'toast show'+(type==='ok'?' ok':type==='err'?' err':'');
-  _tT = setTimeout(() => E.toast.classList.remove('show'), 2800);
+  _tT = setTimeout(() => E.toast.classList.remove('show'), ms || (type==='err' ? 4500 : 2800));
 }
 
 /* ── CLOCK ───────────────────── */
@@ -821,7 +820,6 @@ function renderHistory() {
 /* ── SUBMIT STATE MACHINE ────── */
 function isDemo() { return S.user && S.user.role==='demo'; }
 function updateSubmitText() {
-  syncQtyChips();
   if (S.submitState !== 'idle') return;
   if (isDemo()) { E.submitBtn.disabled=true; E.submitBtn.innerHTML=ic('lock','ms-20')+'Mode Demo'; E.submitBtn.setAttribute('data-mode',S.mode); E.submitBtn.setAttribute('data-state','idle'); return; }
   const qtyValid = Number.isInteger(S.qty) && S.qty >= 1;
@@ -836,43 +834,38 @@ function updateSubmitText() {
 function setSubmitState(state) {
   S.submitState = state;
   if (state==='idle') {
+    E.formCard.classList.remove('busy');
     E.submitBtn.setAttribute('data-state','idle');
     updateSubmitText();
   } else if (state==='submitting') {
+    /* Terkunci selama proses: tombol biru + animasi + teks; sisa form tidak bisa disentuh. */
+    E.formCard.classList.add('busy');
     E.submitBtn.disabled=true; E.submitBtn.setAttribute('data-state','submitting');
-    E.submitBtn.innerHTML = loadingBar() + '<span>Menyimpan…</span>';
+    E.submitBtn.innerHTML = '<span class="btn-ring" aria-hidden="true"></span><span>Menyimpan ke server...</span>' + loadingBar();
   }
 }
 function handleSubmitTap() {
   if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
   setActivity();
-  if (S.submitState==='submitting') return;
+  if (S.submitState==='submitting') return;   /* cegah klik berulang selama proses */
   if (!Number.isInteger(S.qty)||S.qty<1) { toast('Jumlah harus lebih dari 0.','err'); return; }
   if (S.mode==='DATANG'&&!S.photoDataUrl) { toast('Foto invoice belum diambil.','err'); return; }
-
   const w = readTxWhen();
   if (w.error) { toast(w.error,'err'); return; }
 
-  const after  = S.mode==='AMBIL' ? S.stock-S.qty : S.stock+S.qty;
-  const aksi   = S.mode==='AMBIL' ? 'mengambil' : 'menambahkan';
-  const judul  = S.mode==='AMBIL' ? 'Konfirmasi Ambil Galon' : 'Konfirmasi Galon Datang';
-  let   pesan  = `Anda ${aksi} ${S.qty} galon. Sisa stok akan menjadi ${after} galon.`;
-  if (after < 0) pesan += ' Perhatian: stok akan minus.';
-  if (w.custom)  pesan += ` Waktu transaksi: ${formatTanggalID(w.date)}, ${w.time}.`;
-
-  showConfirm(judul, pesan, () => {
-    setSubmitState('submitting');
-    doSaveTransaction();
-  });
+  /* Tanpa dialog konfirmasi: data langsung diproses. */
+  setSubmitState('submitting');
+  doSaveTransaction();
 }
 
 /* ── MODE ────────────────────── */
 function setMode(mode) {
+  if (S.submitState==='submitting') return;   /* jangan ganti mode saat penyimpanan berjalan */
   S.mode=mode; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
   E.modeAmbilBtn.classList.toggle('active', mode!=='DATANG');
   E.modeDatangBtn.classList.toggle('active', mode==='DATANG');
   E.photoSection.classList.toggle('hidden', mode!=='DATANG');
-  S.qty=0; E.qtyInput.value=0; renderQtyChips(); resetTxWhen(); setSubmitState('idle'); setActivity();
+  S.qty=0; E.qtyInput.value=0; resetTxWhen(); setSubmitState('idle'); setActivity();
 }
 function renderPhotoThumb() {
   if (!S.photoDataUrl) {
@@ -1011,15 +1004,6 @@ function maybeAutoRefresh() {
   loadDashboard(true);
 }
 
-function renderQtyChips() {
-  const presets = QTY_PRESETS[S.mode] || QTY_PRESETS.AMBIL;
-  E.qtyQuick.innerHTML = presets.map(q => `<button type="button" class="qty-chip" data-q="${q}">${q}</button>`).join('');
-  syncQtyChips();
-}
-function syncQtyChips() {
-  E.qtyQuick.querySelectorAll('.qty-chip').forEach(b => b.classList.toggle('on', Number(b.dataset.q) === S.qty));
-}
-
 /* Transaksi milik sendiri terbaru = yang baru saja disimpan (waktu input terbesar). */
 function newestOwnTxKey(list) {
   const mine = (list || []).filter(t => S.user && t.kode === S.user.kode);
@@ -1038,15 +1022,20 @@ function clearFlashLater() {
 
 /* ── SAVE TX ─────────────────── */
 function doSaveTransaction() {
+  const mode = S.mode, qty = S.qty;
   google.script.run
     .withSuccessHandler(res=>{
-      setSubmitState('idle');
-      if(!res||!res.ok){toast((res&&res.message)||'Gagal menyimpan.','err');return;}
+      setSubmitState('idle');   /* tombol kembali normal, berhasil maupun gagal */
+      if(res&&res.message==='SESSION_EXPIRED'){doLogout(true);return;}
+      if(!res||!res.ok){toast('Gagal menyimpan: '+((res&&res.message)||'tidak ada respons dari server.'),'err',4500);return;}
       E.noteInput.value=''; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
-      S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater(); toast(res.message||'Tersimpan!','ok'); setActivity();
+      S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater();
+      const sisa = Number(res.stock);
+      toast(`${mode==='AMBIL'?'Ambil':'Galon datang'} ${qty} galon tersimpan. Sisa stok: ${sisa}${sisa<0?' (minus, cek pencatatan)':''}.`,'ok',4000);
+      setActivity();
     })
-    .withFailureHandler(err=>{setSubmitState('idle');toast((err&&err.message)||'Gagal menyimpan.','err');})
-    .saveTransaction({token:S.token,type:S.mode,qty:S.qty,note:E.noteInput.value.trim(),photoDataUrl:S.mode==='DATANG'?S.photoDataUrl:'',photoName:S.photoName,txDate:S.txCustom?E.txDateInput.value:'',txTime:S.txCustom?E.txTimeInput.value:''});
+    .withFailureHandler(err=>{setSubmitState('idle');toast('Gagal menyimpan: '+((err&&err.message)||'koneksi bermasalah.'),'err',4500);})
+    .saveTransaction({token:S.token,type:mode,qty:qty,note:E.noteInput.value.trim(),photoDataUrl:mode==='DATANG'?S.photoDataUrl:'',photoName:S.photoName,txDate:S.txCustom?E.txDateInput.value:'',txTime:S.txCustom?E.txTimeInput.value:''});
 }
 
 /* ── IMAGE COMPRESS ──────────── */
@@ -1303,12 +1292,6 @@ function bindEvents() {
   });
 
   E.submitBtn.addEventListener('click', handleSubmitTap);
-
-  /* Jumlah cepat */
-  E.qtyQuick.addEventListener('click', ev=>{
-    const b = ev.target.closest('.qty-chip'); if (!b) return;
-    S.qty = parseInt(b.dataset.q, 10); E.qtyInput.value = S.qty; updateSubmitText(); setActivity();
-  });
 
   /* Sinkron: ketuk label untuk memperbarui; otomatis saat aplikasi kembali tampil */
   E.scSync.addEventListener('click', ()=>{ setActivity(); loadDashboard(false); });

@@ -95,16 +95,16 @@ html.icons-ready .ms { opacity: 1; }
 }
 
 /* Lapisan keadaan (state layer) untuk semua kontrol yang bisa ditekan */
-.btn, .icon-btn, .qty-side, .qty-chip, .mode-btn, .bottom-btn, .hist-mine-btn, .menu-item, .ann-ok, .tx-more,
+.btn, .icon-btn, .qty-side, .mode-btn, .bottom-btn, .hist-mine-btn, .menu-item, .ann-ok, .tx-more,
 .sc-sync, .time-link, .photo-source-btn, .mt-nav, .mt-close, .ann-chip, .ann-admin-off, .submit-btn, .btn-render, .photo-remove {
   position: relative; overflow: hidden;
 }
-.btn::after, .icon-btn::after, .qty-side::after, .qty-chip::after, .mode-btn::after, .bottom-btn::after, .hist-mine-btn::after,
+.btn::after, .icon-btn::after, .qty-side::after, .mode-btn::after, .bottom-btn::after, .hist-mine-btn::after,
 .menu-item::after, .ann-ok::after, .tx-more::after, .sc-sync::after, .time-link::after, .photo-source-btn::after,
 .mt-nav::after, .mt-close::after, .ann-chip::after, .ann-admin-off::after, .submit-btn::after, .btn-render::after, .photo-remove::after {
   content: ''; position: absolute; inset: 0; background: currentColor; opacity: 0; transition: opacity .15s; pointer-events: none;
 }
-.btn:active::after, .icon-btn:active::after, .qty-side:active::after, .qty-chip:active::after, .mode-btn:active::after,
+.btn:active::after, .icon-btn:active::after, .qty-side:active::after, .mode-btn:active::after,
 .bottom-btn:active::after, .hist-mine-btn:active::after, .menu-item:active::after, .ann-ok:active::after, .tx-more:active::after,
 .sc-sync:active::after, .time-link:active::after, .photo-source-btn:active::after, .mt-nav:active::after, .mt-close:active::after,
 .ann-chip:active::after, .ann-admin-off:active::after, .submit-btn:active::after, .btn-render:active::after, .photo-remove:active::after { opacity: .12; }
@@ -283,15 +283,11 @@ button:disabled { cursor: not-allowed; }
 .qty-field::-webkit-inner-spin-button, .qty-field::-webkit-outer-spin-button { -webkit-appearance: none; }
 .qty-field[type=number] { -moz-appearance: textfield; }
 .qty-field:focus { box-shadow: inset 0 0 0 2px var(--md-primary); }
-.qty-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.qty-chip {
-  appearance: none; border: none; box-shadow: inset 0 0 0 1px var(--md-outline); background: transparent; color: var(--md-on-surface-variant);
-  border-radius: var(--r-sm); min-height: 40px; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; cursor: pointer; touch-action: manipulation;
-  display: flex; align-items: center; justify-content: center; gap: 4px; transition: background .12s, color .12s;
-}
-.qty-chip.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); box-shadow: none; }
-.qty-chip.on::before { content: 'check'; font-family: 'Material Symbols Rounded'; font-size: 18px; font-feature-settings: 'liga'; -webkit-font-feature-settings: 'liga'; }
-html:not(.icons-ready) .qty-chip.on::before { content: ''; }
+/* kontrol jumlah besar di form utama (mudah ditekan di Android) */
+.qty-row.qty-lg { gap: 12px; }
+.qty-row.qty-lg .qty-side { width: 76px; height: 76px; border-radius: 24px; }
+.qty-row.qty-lg .qty-side .ms { font-size: 40px; }
+.qty-row.qty-lg .qty-field { min-height: 76px; font-size: 44px; border-radius: 24px; }
 /* waktu transaksi */
 .time-row { background: var(--md-surface-container-low); border-radius: var(--r-lg); padding: 4px 8px 4px 14px; }
 .time-now, .time-edit-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; }
@@ -321,10 +317,15 @@ html:not(.icons-ready) .qty-chip.on::before { content: ''; }
 }
 .submit-btn:active:not(:disabled) { transform: scale(.985); }
 .submit-btn:disabled { cursor: not-allowed; transform: none !important; }
-.submit-btn[data-state="idle"][data-mode="AMBIL"]  { background: var(--md-primary); color: var(--md-on-primary); }
+.submit-btn[data-state="idle"][data-mode="AMBIL"]  { background: var(--md-error);   color: var(--md-on-error); }
 .submit-btn[data-state="idle"][data-mode="DATANG"] { background: var(--md-success); color: var(--md-on-success); }
 .submit-btn[data-state="idle"]:disabled { background: var(--md-on-surface); color: var(--md-surface); opacity: .12; box-shadow: none; }
-.submit-btn[data-state="submitting"] { background: var(--md-secondary); color: var(--md-on-secondary); }
+/* Saat dikirim: biru, tetap terang (bukan abu-abu), animasi berjalan, klik diabaikan */
+.submit-btn[data-state="submitting"], .submit-btn[data-state="submitting"]:disabled { background: var(--md-primary); color: var(--md-on-primary); opacity: 1; cursor: progress; }
+.submit-btn[data-state="submitting"]::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.24), transparent); transform: translateX(-100%); animation: shimmer 1.4s ease-in-out infinite; pointer-events: none; }
+@keyframes shimmer { to { transform: translateX(100%); } }
+.btn-ring { width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; animation: spin .8s linear infinite; flex-shrink: 0; }
+.form-card.busy > *:not(.submit-btn) { pointer-events: none; opacity: .55; transition: opacity .2s; }
 
 /* 11. RIWAYAT TRANSAKSI ─────────────────────────────────────────── */
 .history-card { margin: 0 12px; background: var(--md-surface-container-lowest); border-radius: var(--r-xl); padding: 16px 12px 14px; box-shadow: var(--e1); }
@@ -478,7 +479,9 @@ tfoot .mt-masuk-val { color: #7ffc97; } tfoot .mt-keluar-val { color: #ffb4ab; }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast .ms { color: var(--md-inverse-primary); }
-.toast.ok .ms { color: #7ffc97; } .toast.err .ms { color: #ffb4ab; }
+.toast.ok  { background: var(--md-success); color: var(--md-on-success); font-weight: 500; }
+.toast.err { background: var(--md-error);   color: var(--md-on-error);   font-weight: 500; }
+.toast.ok .ms, .toast.err .ms { color: #fff; }
 .toast-msg { min-width: 0; }
 
 /* 15b. PREFERENSI GERAK BERKURANG */
