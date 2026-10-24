@@ -28,11 +28,11 @@ let html = read(path.join(FRONT, 'index.html'));
 html = html.replace(INCLUDE_RE, (_, name) => {
   const f = path.join(FRONT, name + '.html');
   if (!fs.existsSync(f)) throw new Error(`File include tidak ditemukan: frontend/${name}.html`);
-  return (name === 'js-core' ? bootstrap : '') + read(f);   // penyesuai dimuat sebelum JS aplikasi
+  return (name === 'script' ? bootstrap : '') + read(f);   // penyesuai dimuat sebelum JS aplikasi (script.html)
 });
 if (/<\?/.test(html)) throw new Error('Masih ada tag template Apps Script (<? ... ?>) di hasil rakitan.');
 if (!html.includes('</head>') || !html.includes('</body>')) throw new Error('index.html tidak memiliki </head> atau </body>.');
-if (!html.includes('window.GALON_API_URL')) throw new Error('Penyesuai tidak tersisip (js-core tidak ditemukan).');
+if (!html.includes('window.GALON_API_URL')) throw new Error('Penyesuai tidak tersisip: include("script") tidak ditemukan di index.html.');
 
 html = html.replace('</head>', read(path.join(SRC, 'head.html')) + '</head>');
 html = html.replace('</body>', read(path.join(SRC, 'sw-register.html')) + '</body>');
