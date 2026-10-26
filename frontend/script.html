@@ -47,7 +47,7 @@ const E = {
   stockNumber: $('stockNumber'), stockStatusPill: $('stockStatusPill'), stockStatusText: $('stockStatusText'),
   statMasuk: $('statMasuk'), statKeluar: $('statKeluar'),
   statMasukLabel: $('statMasukLabel'), statKeluarLabel: $('statKeluarLabel'),
-  formCard: $('formCard'), demoNotice: $('demoNotice'),
+  formCard: $('formCard'), demoNotice: $('demoNotice'), modeBanner: $('modeBanner'), modeBannerIc: $('modeBannerIc'), modeBannerText: $('modeBannerText'),
   scUnit: $('scUnit'), scAvatar: $('scAvatar'), stockStatusIcon: $('stockStatusIcon'), menuAvatar: $('menuAvatar'), menuNama: $('menuNama'), menuRole: $('menuRole'),
   scSync: $('scSync'), scSyncDot: $('scSyncDot'), scSyncLabel: $('scSyncLabel'),
   timeNowView: $('timeNowView'), timeEditView: $('timeEditView'),
@@ -61,7 +61,7 @@ const E = {
   photoCameraBtn: $('photoCameraBtn'), photoGalleryBtn: $('photoGalleryBtn'),
   photoRemoveBtn: $('photoRemoveBtn'),
   submitBtn: $('submitBtn'),
-  monthlyBtn: $('monthlyBtn'), historyBtn: $('historyBtn'), myHistoryBtn: $('myHistoryBtn'), historyTitle: $('historyTitle'),
+  navAkun: $('navAkun'), navSaya: $('navSaya'), navInput: $('navInput'), navRiwayat: $('navRiwayat'), navLaporan: $('navLaporan'), historyTitle: $('historyTitle'),
   txList: $('txList'), txEmpty: $('txEmpty'), txCountBadge: $('txCountBadge'),
   historyModal: $('historyModal'), historyCloseBtn: $('historyCloseBtn'), historySub: $('historySub'),
   historyScroll: $('historyScroll'), historyLoading: $('historyLoading'),
@@ -150,8 +150,32 @@ function formatTanggalPendek(raw) {  /* 'yyyy-MM-dd' → 'Sen, 05 Okt 2026' */
 }
 
 /* ── MENU OVERFLOW (Refresh / Admin / Logout) ─ */
-function openMenu()  { E.menuModal.classList.remove('hidden'); }
-function closeMenu() { E.menuModal.classList.add('hidden'); }
+function openMenu()  { E.menuModal.classList.remove('hidden'); setNav('akun'); }
+function closeMenu() { E.menuModal.classList.add('hidden'); navReset('akun'); }
+
+/* ── NAVBAR BAWAH: 5 menu. Akun = lembar menu, Riwayat/Laporan = lembar penuh di atas halaman Input. ── */
+const NAV_MAP = { akun:'navAkun', saya:'navSaya', input:'navInput', riwayat:'navRiwayat', laporan:'navLaporan' };
+function setNav(name) {
+  S.nav = name;
+  Object.keys(NAV_MAP).forEach(k => {
+    const b = E[NAV_MAP[k]], on = (k === name);
+    b.classList.toggle('active', on);
+    if (on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
+}
+function navReset(name) { if (S.nav === name) setNav('input'); }   /* lembar ditutup → kembali ke Input */
+function goNav(name) {
+  setActivity();
+  const again = (S.nav === name && name !== 'input');   /* ketuk menu yang sedang aktif = tutup */
+  closeMenu(); closeHistory(); closeMonthlyTable();
+  setNav('input');
+  if (again) return;
+  if (name === 'input') { window.scrollTo({ top:0, behavior:'smooth' }); return; }
+  if (name === 'akun') openMenu();
+  else if (name === 'saya') openHistory(true);
+  else if (name === 'riwayat') openHistory(false);
+  else if (name === 'laporan') openMonthlyTable();
+}
 
 /* ── CONFIRM MODAL (generik) ─── */
 let _confirmCallback = null;
@@ -191,6 +215,7 @@ function startIdleWatcher() {
 function showView(v) {
   E.loginView.classList.toggle('hidden', v !== 'login');
   E.mainView.classList.toggle('hidden',  v !== 'main');
+  if (v === 'main') setNav('input');
 }
 
 /* ── TOAST ───────────────────── */
@@ -231,7 +256,7 @@ function renderStock(animate=false) {
     const isDemo = role === 'demo', isAdmin = role === 'admin';
     E.adminBtn.classList.toggle('hidden', !isAdmin && !isDemo);
     E.demoNotice.classList.toggle('hidden', !isDemo);
-    E.myHistoryBtn.classList.toggle('hidden', isDemo);   /* demo tidak punya transaksi */
+    E.navSaya.classList.toggle('hidden', isDemo);   /* demo tidak punya transaksi */
     if (isDemo) {
       E.submitBtn.disabled = true;
       E.submitBtn.innerHTML = ic('lock','ms-20') + 'Mode Demo';
@@ -497,9 +522,10 @@ function openMonthlyTable() {
   E.mtMonthSel.value = String(MT.month);
   E.mtYearSel.value  = String(MT.year);
   E.monthlyModal.classList.remove('hidden');
+  setNav('laporan');
   showPickerScreen();
 }
-function closeMonthlyTable() { E.monthlyModal.classList.add('hidden'); }
+function closeMonthlyTable() { E.monthlyModal.classList.add('hidden'); navReset('laporan'); }
 
 function showPickerScreen() {
   E.monthlyModal.classList.add('mt-picking');      /* kartu kecil di tengah */
@@ -763,9 +789,10 @@ function openHistory(mine) {
   E.historyTitle.innerHTML = HIST.mine ? ic('person') + 'Riwayat Saya' : ic('history') + 'Riwayat Lengkap';
   E.historyScroll.scrollTop = 0;
   E.historyModal.classList.remove('hidden');
+  setNav(HIST.mine ? 'saya' : 'riwayat');
   fetchFullHistory(false);
 }
-function closeHistory() { E.historyModal.classList.add('hidden'); }
+function closeHistory() { E.historyModal.classList.add('hidden'); navReset(HIST.mine ? 'saya' : 'riwayat'); }
 
 /* keepScroll=true: dipanggil setelah edit/hapus — daftar disegarkan tanpa loncat ke atas. */
 function fetchFullHistory(keepScroll) {
@@ -819,7 +846,16 @@ function renderHistory() {
 /* ███ 5. AKSI: submit, login, dashboard, simpan, admin, sinkron ███ */
 /* ── SUBMIT STATE MACHINE ────── */
 function isDemo() { return S.user && S.user.role==='demo'; }
+/* Warna form mengikuti mode (Ambil = merah, Datang = hijau); aktif penuh setelah jumlah >= 1. */
+function syncFormTheme() {
+  const datang = S.mode === 'DATANG';
+  E.formCard.setAttribute('data-mode', datang ? 'DATANG' : 'AMBIL');
+  E.formCard.classList.toggle('has-qty', Number.isInteger(S.qty) && S.qty >= 1);
+  E.modeBannerIc.textContent = datang ? 'arrow_upward' : 'arrow_downward';
+  E.modeBannerText.textContent = datang ? 'Stok datang' : 'Pengambilan galon';
+}
 function updateSubmitText() {
+  syncFormTheme();
   if (S.submitState !== 'idle') return;
   if (isDemo()) { E.submitBtn.disabled=true; E.submitBtn.innerHTML=ic('lock','ms-20')+'Mode Demo'; E.submitBtn.setAttribute('data-mode',S.mode); E.submitBtn.setAttribute('data-state','idle'); return; }
   const qtyValid = Number.isInteger(S.qty) && S.qty >= 1;
@@ -869,7 +905,7 @@ function setMode(mode) {
 }
 function renderPhotoThumb() {
   if (!S.photoDataUrl) {
-    E.photoThumb.innerHTML=ic('receipt_long','ms-28')+'<span>Tap untuk pilih foto invoice — dari kamera atau galeri</span>';
+    E.photoThumb.innerHTML=ic('receipt_long','ms-28')+'<span>Foto invoice wajib — pilih Kamera atau Galeri di bawah</span>';
     E.photoThumb.classList.remove('has-photo');
     E.photoRemoveBtn.classList.add('hidden');
   } else {
@@ -1303,11 +1339,10 @@ function bindEvents() {
 
 
   /* Monthly table */
-  E.monthlyBtn.addEventListener('click', openMonthlyTable);
 
   /* Riwayat Lengkap */
-  E.historyBtn.addEventListener('click', ()=>openHistory(false));
-  E.myHistoryBtn.addEventListener('click', ()=>openHistory(true));
+  /* Navbar bawah */
+  Object.keys(NAV_MAP).forEach(k => E[NAV_MAP[k]].addEventListener('click', ()=>goNav(k)));
   E.historyCloseBtn.addEventListener('click', closeHistory);
   E.historyModal.addEventListener('click', ev=>{ if(ev.target===E.historyModal) closeHistory(); });
   E.mtPickerCloseBtn.addEventListener('click', closeMonthlyTable);

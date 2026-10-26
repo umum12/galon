@@ -7,7 +7,7 @@
   <title>Galon App</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&amp;family=Rajdhani:wght@600;700&amp;display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&amp;icon_names=add,admin_panel_settings,arrow_downward,arrow_upward,bar_chart,build,calendar_today,campaign,check_circle,chevron_left,chevron_right,close,delete,edit,edit_note,error,history,image,info,inventory_2,key,lock,login,logout,more_horiz,more_vert,person,photo_camera,picture_as_pdf,receipt_long,refresh,remove,schedule,send,settings,table_view,tune,verified_user,visibility,warning&amp;display=block">
   <?!= include('style'); ?>
 </head>
@@ -65,11 +65,10 @@
         </div>
       </div>
       <div class="tb-right">
-        <div class="tb-user">
+        <button type="button" class="tb-user" id="menuBtn" title="Akun" aria-label="Akun dan menu">
           <span class="tb-avatar" id="scAvatar">?</span>
           <span class="tb-user-text"><span class="tb-nama" id="scNama">—</span><span class="tb-role" id="scRole">—</span></span>
-        </div>
-        <button class="icon-btn" id="menuBtn" title="Menu" aria-label="Menu"><span class="ms">more_vert</span></button>
+        </button>
       </div>
     </header>
 
@@ -105,8 +104,9 @@
     <div class="ann-list hidden" id="annList"></div>
 
     <!-- FORM -->
-    <section class="form-card" id="formCard">
+    <section class="form-card" id="formCard" data-mode="AMBIL">
       <div class="demo-notice hidden" id="demoNotice"><span class="ms ms-20">lock</span>Mode Demo — tidak dapat menyimpan transaksi</div>
+      <div class="mode-banner" id="modeBanner" role="status"><span class="ms ms-20" id="modeBannerIc">arrow_downward</span><span id="modeBannerText">Pengambilan galon</span></div>
       <div class="mode-toggle" role="group" aria-label="Jenis transaksi">
         <button class="mode-btn active ambil" id="modeAmbilBtn"><span class="ms seg-ic">arrow_downward</span>Ambil</button>
         <button class="mode-btn datang" id="modeDatangBtn"><span class="ms seg-ic">arrow_upward</span>Datang</button>
@@ -135,7 +135,7 @@
       </div>
       <div class="hidden" id="photoSection">
         <div class="photo-box">
-          <div class="photo-thumb" id="photoThumb"><span class="ms ms-28">receipt_long</span><span>Pilih sumber foto invoice di bawah</span></div>
+          <div class="photo-thumb" id="photoThumb"><span class="ms ms-28">receipt_long</span><span>Foto invoice wajib — pilih Kamera atau Galeri di bawah</span></div>
           <button type="button" class="photo-remove hidden" id="photoRemoveBtn" title="Hapus foto" aria-label="Hapus foto"><span class="ms ms-20">close</span></button>
         </div>
         <div class="photo-source-row">
@@ -152,18 +152,20 @@
     <section class="history-card">
       <div class="history-hdr">
         <span class="tx-count-badge" id="txCountBadge">0 TRANSAKSI TERAKHIR</span>
-        <button type="button" class="hist-mine-btn" id="myHistoryBtn"><span class="ms ms-18">person</span>Riwayat Saya</button>
       </div>
       <div class="history-hint">Ketuk ⋯ (atau tekan &amp; tahan) pada transaksi untuk edit atau hapus.</div>
       <div class="tx-list" id="txList"></div>
       <div class="tx-empty hidden" id="txEmpty">Belum ada transaksi.</div>
     </section>
 
-    <!-- AKSI BAWAH -->
-    <div class="bottom-actions">
-      <button class="bottom-btn" id="monthlyBtn"><span class="ms ms-20">bar_chart</span>Laporan Bulanan</button>
-      <button class="bottom-btn" id="historyBtn"><span class="ms ms-20">history</span>Riwayat Lengkap</button>
-    </div>
+    <!-- NAVBAR BAWAH (5 menu, mengikuti referensi UI) -->
+    <nav class="bottomnav" id="bottomNav" aria-label="Navigasi utama">
+      <button type="button" class="nav-item" id="navAkun"><span class="nav-ic"><span class="ms">person</span></span><span class="nav-lbl">Akun</span></button>
+      <button type="button" class="nav-item" id="navSaya"><span class="nav-ic"><span class="ms">receipt_long</span></span><span class="nav-lbl">Riwayat Saya</span></button>
+      <button type="button" class="nav-item nav-input active" id="navInput" aria-current="page"><span class="nav-ic"><span class="ms">add</span></span><span class="nav-lbl">Input</span></button>
+      <button type="button" class="nav-item" id="navRiwayat"><span class="nav-ic"><span class="ms">history</span></span><span class="nav-lbl">Riwayat Lengkap</span></button>
+      <button type="button" class="nav-item" id="navLaporan"><span class="nav-ic"><span class="ms">bar_chart</span></span><span class="nav-lbl">Laporan</span></button>
+    </nav>
 
   </div><!-- /mainView -->
 </div><!-- /app -->
