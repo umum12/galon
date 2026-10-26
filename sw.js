@@ -1,5 +1,5 @@
-/* Service worker Galon App — shell aplikasi bisa dibuka tanpa jaringan; data selalu dari server. Build: 20261026175445 */
-const VERSION = 'galon-20261026175445';
+/* Service worker Galon App — shell aplikasi bisa dibuka tanpa jaringan; data selalu dari server. Build: 20261026233759 */
+const VERSION = 'galon-20261026233759';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'api.js', 'config.js', 'pwa.js', 'manifest.webmanifest',
                'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png'];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];

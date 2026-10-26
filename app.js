@@ -45,7 +45,7 @@ const E = {
   stockNumber: $('stockNumber'), stockStatusPill: $('stockStatusPill'), stockStatusText: $('stockStatusText'),
   statMasuk: $('statMasuk'), statKeluar: $('statKeluar'),
   statMasukLabel: $('statMasukLabel'), statKeluarLabel: $('statKeluarLabel'),
-  formCard: $('formCard'), demoNotice: $('demoNotice'), modeBanner: $('modeBanner'), modeBannerIc: $('modeBannerIc'), modeBannerText: $('modeBannerText'),
+  formCard: $('formCard'), resetFormBtn: $('resetFormBtn'), demoNotice: $('demoNotice'), modeBanner: $('modeBanner'), modeBannerIc: $('modeBannerIc'), modeBannerText: $('modeBannerText'),
   scUnit: $('scUnit'), scAvatar: $('scAvatar'), stockStatusIcon: $('stockStatusIcon'), menuAvatar: $('menuAvatar'), menuNama: $('menuNama'), menuRole: $('menuRole'),
   scSync: $('scSync'), scSyncDot: $('scSyncDot'), scSyncLabel: $('scSyncLabel'),
   timeNowView: $('timeNowView'), timeEditView: $('timeEditView'),
@@ -60,7 +60,7 @@ const E = {
   photoRemoveBtn: $('photoRemoveBtn'),
   submitBtn: $('submitBtn'),
   navAkun: $('navAkun'), navSaya: $('navSaya'), navInput: $('navInput'), navRiwayat: $('navRiwayat'), navLaporan: $('navLaporan'), historyTitle: $('historyTitle'),
-  txList: $('txList'), txEmpty: $('txEmpty'), txCountBadge: $('txCountBadge'),
+  txList: $('txList'), pickerModal: $('pickerModal'), photoPickerCancelBtn: $('photoPickerCancelBtn'),
   historyModal: $('historyModal'), historyCloseBtn: $('historyCloseBtn'), historySub: $('historySub'),
   historyScroll: $('historyScroll'), historyLoading: $('historyLoading'),
   historyList: $('historyList'), historyEmpty: $('historyEmpty'),
@@ -283,44 +283,44 @@ function renderStock(animate=false) {
 }
 
 /* ── RENDER: RIWAYAT ─────────── */
-/* Kartu satu transaksi. Kolom kanan: jam (atas) · jumlah (tengah) · dicatat/diedit (bawah).
-   Badge: JENIS · SUSULAN (bila waktu kejadian ≠ waktu input) · EDIT (bila pernah diedit). */
+/* Kartu satu transaksi:
+   baris 1 = nama + jam (di sampingnya) · ⋯   |   baris 2 = lencana berikon · jumlah   |   keterangan (kotak sendiri)
+   |   kaki = "dicatat/diedit …" (kiri) · chip Foto (kanan).
+   Lencana: JENIS · BARU (hari ini) · SUSULAN (waktu kejadian ≠ waktu input) · EDIT (pernah diedit). */
+const TX_LABEL = { AMBIL: ['Ambil', 'logout'], DATANG: ['Datang', 'login'], KOREKSI: ['Koreksi', 'tune'] };
+function txPill(cls, icon, label) { return `<span class="tx-pill ${cls}">${ic(icon, 'ms-16')}${label}</span>`; }
 function buildTxItem(tx, colorClass, mine) {
   const isAmbil=tx.jenis==='AMBIL', isKoreksi=tx.jenis==='KOREKSI';
   const pillClass = isKoreksi?'koreksi':isAmbil?'ambil':'datang';
   const qtyClass  = isKoreksi?(tx.qty>0?'plus':tx.qty<0?'minus':'neutral'):isAmbil?'minus':'plus';
   const sign      = isAmbil?'−':isKoreksi?(tx.qty>0?'+':tx.qty<0?'−':''):'+';
-  const noteHtml  = tx.note?`<span class="tx-note">· ${esc(tx.note)}</span>`:'';
-  const photoHtml = tx.photoUrl?`<a class="tx-photo-link" href="${esc(tx.photoUrl)}" target="_blank" rel="noopener" aria-label="Foto invoice">${ic('photo_camera','ms-18')}</a>`:'';
-  const susulanHtml = tx.susulan  ? '<span class="tx-pill susulan">SUSULAN</span>' : '';
-  const editHtml    = tx.editedAt ? '<span class="tx-pill edit">EDIT</span>' : '';
+  const lab = TX_LABEL[tx.jenis] || [tx.jenis, 'receipt_long'];
+  const pills = txPill(pillClass, lab[1], esc(lab[0])) +
+    (tx.isNew    ? txPill('baru',    'auto_awesome',       'Baru')    : '') +   /* transaksi hari ini */
+    (tx.susulan  ? txPill('susulan', 'history_toggle_off', 'Susulan') : '') +
+    (tx.editedAt ? txPill('edit',    'edit',               'Edit')    : '');
+  const noteHtml  = tx.note ? `<div class="tx-note-box">${ic('chat','ms-20')}<span class="tx-note-text">${esc(tx.note)}</span></div>` : '';
+  const photoHtml = tx.photoUrl ? `<a class="tx-photo-chip" href="${esc(tx.photoUrl)}" target="_blank" rel="noopener" aria-label="Foto invoice">${ic('photo_camera','ms-18')}Foto</a>` : '';
   const stamp = tx.editedAt
     ? `diedit ${esc(formatDicatat(tx.editedAt))}`
     : `dicatat ${esc(formatDicatat(tx.timestamp))}`;
   const hhmm = tx.time ? tx.time.substring(0,5) : '—';
-  /* Mode "Riwayat Saya": nama selalu milik sendiri, jadi barisnya dipakai untuk tanggal + jam yang jelas. */
   const moreHtml = canManageTx(tx) ? '<button type="button" class="tx-more" aria-label="Edit atau hapus">' + ic('more_horiz') + '</button>' : '';
-  const row1 = mine
-    ? `<div class="tx-nama tx-when-date">${ic('calendar_today','ms-18')}${esc(formatTanggalPendek(tx.date))}</div>
-       <div class="tx-top-right"><div class="tx-time tx-when-time">${ic('schedule','ms-18')}${esc(hhmm)}</div>${moreHtml}</div>`
-    : `<div class="tx-nama">${esc(tx.nama||tx.kode)}</div>
-       <div class="tx-top-right"><div class="tx-time">${esc(hhmm)}</div>${moreHtml}</div>`;
+  /* Mode "Riwayat Saya": nama selalu milik sendiri, jadi yang tampil tanggal + jam. */
+  const who = mine
+    ? `<span class="tx-nama tx-when-date">${ic('calendar_today','ms-18')}${esc(formatTanggalPendek(tx.date))}</span><span class="tx-time">${esc(hhmm)}</span>`
+    : `<span class="tx-nama">${esc(tx.nama||tx.kode)}</span><span class="tx-time">${esc(hhmm)}</span>`;
   const div = document.createElement('div');
   const flashCls = (S.flash && S.flash === `${tx.timestamp}|${tx.kode}`) ? ' tx-flash' : '';
   div.className = `tx-item ${colorClass}${flashCls}`;
   div.innerHTML = `
-    <div class="tx-row1">${row1}</div>
+    <div class="tx-row1"><div class="tx-who">${who}</div>${moreHtml}</div>
     <div class="tx-row2">
-      <span class="tx-pills"><span class="tx-pill ${pillClass}">${esc(tx.jenis)}</span>${susulanHtml}${editHtml}</span>
+      <span class="tx-pills">${pills}</span>
       <div class="tx-qty ${qtyClass}">${sign}${Math.abs(tx.qty)}</div>
     </div>
-    <div class="tx-row3">
-      <div class="tx-meta-row">${noteHtml || '<span></span>'}</div>
-      <div class="tx-right2">
-        <span class="tx-sisa">${stamp}</span>
-        ${photoHtml}
-      </div>
-    </div>`;
+    ${noteHtml}
+    <div class="tx-row3"><span class="tx-sisa">${stamp}</span>${photoHtml}</div>`;
   setupLongPress(div, tx);
   const moreBtn = div.querySelector('.tx-more');
   if (moreBtn) {
@@ -346,7 +346,7 @@ function renderTxList(container, items, mine) {
       else {
       const hdr = document.createElement('div');
       hdr.className = 'tx-date-hdr';
-      hdr.textContent = formatTanggalID(txDate);
+      hdr.innerHTML = ic('calendar_today','ms-20') + '<span>' + esc(formatTanggalID(txDate)) + '</span>';
       container.appendChild(hdr);
       }
     }
@@ -354,12 +354,33 @@ function renderTxList(container, items, mine) {
   });
 }
 
+/* Kartu dashboard: transaksi HARI INI (berlencana BARU) dan KEMARIN, menurut tanggal kejadian (waktu perangkat).
+   Yang lebih lama ada di Riwayat Lengkap. Server mengirim RECENT_SERVER_LIMIT transaksi terbaru. */
+const RECENT_SERVER_LIMIT = 30;   /* sama dengan TX_RECENT_LIMIT di Code.gs */
 function renderRecent() {
-  const list = (S.recent || []).slice(0, 10);
-  E.txCountBadge.textContent = `${list.length} TRANSAKSI TERAKHIR`;
-  if (!list.length) { E.txList.innerHTML = ''; E.txEmpty.classList.remove('hidden'); return; }
-  E.txEmpty.classList.add('hidden');
-  renderTxList(E.txList, list);
+  const now = new Date();
+  const today = toISODate(now), yest = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+  const all = S.recent || [];
+  const groups = [
+    { title: 'Transaksi Hari Ini', empty: 'Belum ada transaksi hari ini.', isNew: true,  items: all.filter(t => String(t.date).substring(0,10) === today) },
+    { title: 'Transaksi Kemarin',  empty: 'Tidak ada transaksi kemarin.',  isNew: false, items: all.filter(t => String(t.date).substring(0,10) === yest) },
+  ];
+  E.txList.innerHTML = '';
+  groups.forEach(g => {
+    const sec = document.createElement('div');
+    sec.className = 'tx-group';
+    sec.innerHTML = `<div class="tx-group-hdr"><span class="tx-group-title">${g.title}</span><span class="tx-group-count">${g.items.length}</span></div>`;
+    if (!g.items.length) {
+      sec.insertAdjacentHTML('beforeend', `<div class="tx-group-empty">${g.empty}</div>`);
+    } else {
+      g.items.forEach(tx => sec.appendChild(buildTxItem(g.isNew ? Object.assign({}, tx, { isNew: true }) : tx, 'tx-day-a')));
+    }
+    E.txList.appendChild(sec);
+  });
+  const oldest = all.length ? String(all[all.length - 1].date).substring(0,10) : '';
+  if (all.length >= RECENT_SERVER_LIMIT && oldest >= yest) {
+    E.txList.insertAdjacentHTML('beforeend', '<div class="tx-group-empty">Daftar dibatasi ' + RECENT_SERVER_LIMIT + ' transaksi terbaru — lihat selengkapnya di Riwayat Lengkap.</div>');
+  }
 }
 
 /* ── LONG PRESS ──────────────── */
@@ -868,6 +889,7 @@ function updateSubmitText() {
 function setSubmitState(state) {
   S.submitState = state;
   if (state==='idle') {
+    clearInterval(SUB.timer); SUB.timer = null;
     E.formCard.classList.remove('busy');
     E.submitBtn.setAttribute('data-state','idle');
     updateSubmitText();
@@ -875,8 +897,33 @@ function setSubmitState(state) {
     /* Terkunci selama proses: tombol biru + animasi + teks; sisa form tidak bisa disentuh. */
     E.formCard.classList.add('busy');
     E.submitBtn.disabled=true; E.submitBtn.setAttribute('data-state','submitting');
-    E.submitBtn.innerHTML = '<span class="btn-ring" aria-hidden="true"></span><span>Menyimpan ke server...</span>' + loadingBar();
+    E.submitBtn.innerHTML = '<span class="submit-prog" id="submitProg" aria-hidden="true"></span><span class="submit-prog-inner"><span class="btn-ring" aria-hidden="true"></span><span id="submitPct"></span></span>';
+    submitProgressStart();
   }
+}
+/* Progres kirim: bar oranye mengisi tombol + persen. Naik cepat lalu melambat (maks 92%) sampai server menjawab, lalu 100%. */
+const SUB = { timer: null, pct: 0 };
+function submitProgressSet(p) {
+  SUB.pct = p;
+  const bar = document.getElementById('submitProg'), tx = document.getElementById('submitPct');
+  if (bar) bar.style.width = p + '%';
+  if (tx)  tx.textContent = (S.mode === 'AMBIL' ? 'Mengurangi stok' : 'Menambah stok') + '... ' + Math.round(p) + '%';
+}
+function submitProgressStart() {
+  clearInterval(SUB.timer); submitProgressSet(0);
+  SUB.timer = setInterval(() => { submitProgressSet(Math.min(92, SUB.pct + Math.max(.35, (92 - SUB.pct) * .045))); }, 80);
+}
+/* success=true: tampilkan 100% sebentar lalu lanjut; gagal: langsung lanjut. */
+function submitProgressEnd(success, done) {
+  clearInterval(SUB.timer); SUB.timer = null;
+  if (!success) { done(); return; }
+  submitProgressSet(100); setTimeout(done, 280);
+}
+/* Reset jumlah + catatan (mode, waktu, dan foto tidak diubah). */
+function doResetForm() {
+  if (S.submitState === 'submitting') return;
+  S.qty = 0; E.qtyInput.value = 0; E.noteInput.value = '';
+  updateSubmitText(); setActivity(); toast('Jumlah dan catatan direset.');
 }
 function handleSubmitTap() {
   if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
@@ -901,9 +948,12 @@ function setMode(mode) {
   E.photoSection.classList.toggle('hidden', mode!=='DATANG');
   S.qty=0; E.qtyInput.value=0; resetTxWhen(); setSubmitState('idle'); setActivity();
 }
+/* Pilih sumber foto invoice: dialog di tengah layar dengan latar blur (seperti referensi). */
+function openPhotoPicker()  { E.pickerModal.classList.remove('hidden'); }
+function closePhotoPicker() { E.pickerModal.classList.add('hidden'); }
 function renderPhotoThumb() {
   if (!S.photoDataUrl) {
-    E.photoThumb.innerHTML=ic('receipt_long','ms-28')+'<span>Foto invoice wajib — pilih Kamera atau Galeri di bawah</span>';
+    E.photoThumb.innerHTML=ic('receipt_long','ms-28')+'<span>Tap untuk pilih foto invoice — dari kamera atau galeri</span>';
     E.photoThumb.classList.remove('has-photo');
     E.photoRemoveBtn.classList.add('hidden');
   } else {
@@ -1059,16 +1109,18 @@ function doSaveTransaction() {
   const mode = S.mode, qty = S.qty;
   google.script.run
     .withSuccessHandler(res=>{
-      setSubmitState('idle');   /* tombol kembali normal, berhasil maupun gagal */
-      if(res&&res.message==='SESSION_EXPIRED'){doLogout(true);return;}
-      if(!res||!res.ok){toast('Gagal menyimpan: '+((res&&res.message)||'tidak ada respons dari server.'),'err',4500);return;}
-      E.noteInput.value=''; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
-      S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater();
-      const sisa = Number(res.stock);
-      toast(`${mode==='AMBIL'?'Ambil':'Galon datang'} ${qty} galon tersimpan. Sisa stok: ${sisa}${sisa<0?' (minus, cek pencatatan)':''}.`,'ok',4000);
-      setActivity();
+      submitProgressEnd(!!(res&&res.ok), ()=>{
+        setSubmitState('idle');   /* tombol kembali normal, berhasil maupun gagal */
+        if(res&&res.message==='SESSION_EXPIRED'){doLogout(true);return;}
+        if(!res||!res.ok){toast('Gagal menyimpan: '+((res&&res.message)||'tidak ada respons dari server.'),'err',4500);return;}
+        E.noteInput.value=''; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
+        S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater();
+        const sisa = Number(res.stock);
+        toast(`${mode==='AMBIL'?'Ambil':'Galon datang'} ${qty} galon tersimpan. Sisa stok: ${sisa}${sisa<0?' (minus, cek pencatatan)':''}.`,'ok',4000);
+        setActivity();
+      });
     })
-    .withFailureHandler(err=>{setSubmitState('idle');toast('Gagal menyimpan: '+((err&&err.message)||'koneksi bermasalah.'),'err',4500);})
+    .withFailureHandler(err=>{ submitProgressEnd(false, ()=>{ setSubmitState('idle'); toast('Gagal menyimpan: '+((err&&err.message)||'koneksi bermasalah.'),'err',4500); }); })
     .saveTransaction({token:S.token,type:mode,qty:qty,note:E.noteInput.value.trim(),photoDataUrl:mode==='DATANG'?S.photoDataUrl:'',photoName:S.photoName,txDate:S.txCustom?E.txDateInput.value:'',txTime:S.txCustom?E.txTimeInput.value:''});
 }
 
@@ -1158,40 +1210,25 @@ const A = {
   pesan: $('annPesan'), tplBtn: $('annTemplateBtn'), sendBtn: $('annSendBtn'), adminList: $('annAdminList'),
 };
 
+/* Pengumuman = teks berjalan (marquee) selama masa berlaku; hilang otomatis saat kedaluwarsa atau dinonaktifkan admin. */
 function renderAnnouncements() {
-  const shown = (S.ann || []).filter(a => !a.dibaca);   /* dibaca = status dari server */
+  const list = S.ann || [];
   A.list.innerHTML = '';
-  if (!shown.length) { A.list.classList.add('hidden'); return; }
-  shown.forEach(a => {
-    const warn = a.tipe === 'PERINGATAN';
-    const div = document.createElement('div');
-    div.className = `ann-item ${warn ? 'warn' : 'info'}`;
-    div.innerHTML =
+  if (!list.length) { A.list.classList.add('hidden'); return; }
+  const warn = list.some(a => a.tipe === 'PERINGATAN');
+  const flat = a => String(a.pesan || '').replace(/\s*\n\s*/g, ' ');
+  const body = list.map(a =>
+    `<span class="ann-seg"><b>${a.tipe === 'PERINGATAN' ? 'Peringatan' : 'Pengumuman'}:</b> ${esc(flat(a))}</span>`
+  ).join('<span class="ann-sep" aria-hidden="true">•</span>');
+  const chars = list.reduce((n, a) => n + flat(a).length + 14, 0);
+  const dur   = Math.max(14, Math.round(chars * 0.16));   /* kecepatan baca tetap, lebih panjang = lebih lama */
+  const full  = list.map(a => (a.tipe === 'PERINGATAN' ? 'Peringatan: ' : 'Pengumuman: ') + flat(a)).join(' • ');
+  A.list.innerHTML =
+    `<div class="ann-strip ${warn ? 'warn' : 'info'}" role="marquee" title="${esc(full)}">` +
       ic(warn ? 'warning' : 'campaign', 'ann-lead') +
-      `<div class="ann-body">` +
-        `<div class="ann-title">${warn ? 'Peringatan' : 'Pengumuman'} · ${esc(formatDicatat(a.createdAt))}</div>` +
-        `<div class="ann-text">${esc(a.pesan)}</div>` +
-      `</div><button type="button" class="ann-ok">Mengerti</button>`;
-    div.querySelector('.ann-ok').addEventListener('click', () => markAnnRead(a));
-    A.list.appendChild(div);
-  });
+      `<div class="ann-marquee"><div class="ann-marquee-content" style="animation-duration:${dur}s">${body}</div></div>` +
+    `</div>`;
   A.list.classList.remove('hidden');
-}
-
-/* Banner langsung hilang (optimistis); bila server gagal, banner dikembalikan. */
-function markAnnRead(a) {
-  a.dibaca = true; renderAnnouncements(); saveCache(); setActivity();
-  if (isDemo()) return;   /* demo hanya melihat: tidak menulis ke server */
-  const revert = msg => { a.dibaca = false; renderAnnouncements(); saveCache(); toast(msg || 'Gagal menandai dibaca.','err'); };
-  google.script.run
-    .withSuccessHandler(res => {
-      if (res && res.ok) return;
-      if (res && res.message === 'SESSION_EXPIRED') { doLogout(true); return; }
-      if (res && /tidak aktif/.test(res.message||'')) { S.ann = S.ann.filter(x => x.id !== a.id); renderAnnouncements(); saveCache(); return; }
-      revert(res && res.message);
-    })
-    .withFailureHandler(err => revert(err && err.message))
-    .markAnnouncementRead(S.token, a.id);
 }
 
 /* ── Panel admin ── */
@@ -1216,13 +1253,11 @@ function renderAnnouncementAdmin() {
   if (!list.length) { A.adminList.innerHTML = '<div class="admin-current">Belum ada pengumuman aktif.</div>'; return; }
   list.forEach(a => {
     const warn = a.tipe === 'PERINGATAN';
-    const dibaca = a.dibaca || [], belum = a.belum || [];
     const div = document.createElement('div');
     div.className = 'ann-admin-item';
     div.innerHTML =
       `<div class="ann-admin-meta"><span>${ic(warn ? 'warning' : 'campaign', 'ms-16')}${warn ? 'Peringatan' : 'Info'} · ${esc(a.targetLabel)}</span><span>s/d ${esc(fmtExp(a.expiresAt))}</span></div>` +
       `<div class="ann-admin-text">${esc(a.pesan)}</div>` +
-      `<div class="ann-admin-read ${belum.length ? '' : 'done'}">${ic('visibility','ms-16')}Dibaca ${dibaca.length} dari ${dibaca.length + belum.length}${belum.length ? ' · belum: ' + esc(belum.map(p => p.nama).join(', ')) : ' · semua sudah membaca ✓'}</div>` +
       `<button type="button" class="ann-admin-off">Nonaktifkan</button>`;
     div.querySelector('.ann-admin-off').addEventListener('click', ev => doDeactivateAnn(a.id, ev.currentTarget));
     A.adminList.appendChild(div);
@@ -1319,8 +1354,12 @@ function bindEvents() {
   }
   E.photoInputCamera.addEventListener('change', handlePhotoFile);
   E.photoInputGallery.addEventListener('change', handlePhotoFile);
-  E.photoCameraBtn.addEventListener('click', ()=>{ setActivity(); E.photoInputCamera.click(); });
-  E.photoGalleryBtn.addEventListener('click', ()=>{ setActivity(); E.photoInputGallery.click(); });
+  E.photoThumb.addEventListener('click', ()=>{ if (S.submitState==='submitting') return; setActivity(); openPhotoPicker(); });
+  E.photoCameraBtn.addEventListener('click', ()=>{ setActivity(); closePhotoPicker(); E.photoInputCamera.click(); });
+  E.photoGalleryBtn.addEventListener('click', ()=>{ setActivity(); closePhotoPicker(); E.photoInputGallery.click(); });
+  E.photoPickerCancelBtn.addEventListener('click', closePhotoPicker);
+  E.pickerModal.addEventListener('click', ev=>{ if(ev.target===E.pickerModal) closePhotoPicker(); });
+  E.resetFormBtn.addEventListener('click', doResetForm);
   E.photoRemoveBtn.addEventListener('click', ()=>{
     S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb(); setActivity();
   });

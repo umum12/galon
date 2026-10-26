@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&amp;family=Rajdhani:wght@600;700&amp;display=swap">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&amp;icon_names=add,admin_panel_settings,arrow_downward,arrow_upward,bar_chart,build,calendar_today,campaign,check_circle,chevron_left,chevron_right,close,delete,edit,edit_note,error,history,image,info,inventory_2,key,lock,login,logout,more_horiz,more_vert,person,photo_camera,picture_as_pdf,receipt_long,refresh,remove,schedule,send,settings,table_view,tune,verified_user,visibility,warning&amp;display=block">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&amp;icon_names=add,admin_panel_settings,arrow_downward,arrow_upward,auto_awesome,bar_chart,build,calendar_today,campaign,chat,check_circle,chevron_left,chevron_right,close,delete,edit,edit_note,error,history,history_toggle_off,image,info,inventory_2,key,lock,login,logout,more_horiz,more_vert,person,photo_camera,picture_as_pdf,receipt_long,refresh,remove,restart_alt,schedule,send,settings,table_view,tune,verified_user,visibility,warning&amp;display=block">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -124,7 +124,10 @@
         <input class="qty-field" id="qtyInput" type="number" value="0" min="0" max="999" inputmode="numeric" aria-label="Jumlah galon">
         <button class="qty-side" id="plusBtn" aria-label="Tambah"><span class="ms">add</span></button>
       </div>
-      <label class="tf"><input id="noteInput" type="text" placeholder=" " maxlength="200" autocomplete="off"><span class="tf-label">Catatan (opsional)</span></label>
+      <div class="note-row">
+        <label class="tf"><input id="noteInput" type="text" placeholder=" " maxlength="200" autocomplete="off"><span class="tf-label">Catatan (opsional)</span></label>
+        <button type="button" class="note-reset" id="resetFormBtn" title="Reset jumlah dan catatan" aria-label="Reset jumlah dan catatan"><span class="ms">restart_alt</span></button>
+      </div>
       <div class="time-row" id="timeRow">
         <div class="time-now" id="timeNowView">
           <span class="time-label"><span class="ms ms-20">schedule</span><span>Waktu transaksi: <strong>Sekarang</strong></span></span>
@@ -143,12 +146,8 @@
       </div>
       <div class="hidden" id="photoSection">
         <div class="photo-box">
-          <div class="photo-thumb" id="photoThumb"><span class="ms ms-28">receipt_long</span><span>Foto invoice wajib — pilih Kamera atau Galeri di bawah</span></div>
+          <button type="button" class="photo-thumb" id="photoThumb" aria-haspopup="dialog"><span class="ms ms-28">receipt_long</span><span>Tap untuk pilih foto invoice — dari kamera atau galeri</span></button>
           <button type="button" class="photo-remove hidden" id="photoRemoveBtn" title="Hapus foto" aria-label="Hapus foto"><span class="ms ms-20">close</span></button>
-        </div>
-        <div class="photo-source-row">
-          <button type="button" class="photo-source-btn" id="photoCameraBtn"><span class="ms ms-20">photo_camera</span>Kamera</button>
-          <button type="button" class="photo-source-btn" id="photoGalleryBtn"><span class="ms ms-20">image</span>Galeri</button>
         </div>
         <input type="file" id="photoInputCamera" accept="image/*" capture="environment">
         <input type="file" id="photoInputGallery" accept="image/*">
@@ -158,12 +157,8 @@
 
     <!-- RIWAYAT -->
     <section class="history-card">
-      <div class="history-hdr">
-        <span class="tx-count-badge" id="txCountBadge">0 TRANSAKSI TERAKHIR</span>
-      </div>
-      <div class="history-hint">Ketuk ⋯ (atau tekan &amp; tahan) pada transaksi untuk edit atau hapus.</div>
+      <div class="history-hint">Ketuk ⋯ (atau tekan &amp; tahan) pada transaksi untuk edit atau hapus. Transaksi sebelumnya ada di Riwayat Lengkap.</div>
       <div class="tx-list" id="txList"></div>
-      <div class="tx-empty hidden" id="txEmpty">Belum ada transaksi.</div>
     </section>
 
     <!-- NAVBAR BAWAH (5 menu, mengikuti referensi UI) -->
@@ -210,7 +205,7 @@
     </div>
     <div class="admin-block">
       <div class="admin-block-title"><span class="ms ms-20">campaign</span>Pengumuman</div>
-      <div class="admin-block-desc">Pengingat yang tampil sebagai banner di aplikasi petugas, hilang otomatis saat masa berlaku habis. Petugas menutupnya dengan tombol "Mengerti"; status baca tiap petugas tampil di daftar di bawah.</div>
+      <div class="admin-block-desc">Pengingat yang tampil sebagai teks berjalan di aplikasi petugas selama masa berlaku, lalu hilang otomatis. Gunakan "Nonaktifkan" untuk menghentikannya lebih awal.</div>
       <div class="admin-row">
         <label class="tf sel always"><select id="annTipe"><option value="INFO">Info</option><option value="PERINGATAN">Peringatan</option></select><span class="tf-label">Tipe</span></label>
         <label class="tf sel always"><select id="annDays"><option value="1">1 hari</option><option value="3" selected>3 hari</option><option value="7">7 hari</option><option value="14">14 hari</option></select><span class="tf-label">Berlaku</span></label>
@@ -314,6 +309,18 @@
       <button class="btn btn-text" id="confirmNoBtn">Batal</button>
       <button class="btn btn-text" id="confirmYesBtn">Ya</button>
     </div>
+  </div>
+</div>
+
+<!-- PILIH SUMBER FOTO INVOICE (blur, di tengah layar) -->
+<div id="pickerModal" class="modal-backdrop center hidden" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+  <div class="modal-sheet center picker-card">
+    <div class="picker-title" id="pickerTitle">Pilih Sumber Foto Invoice</div>
+    <div class="picker-grid">
+      <button type="button" class="picker-tile cam" id="photoCameraBtn"><span class="ms">photo_camera</span>Kamera</button>
+      <button type="button" class="picker-tile gal" id="photoGalleryBtn"><span class="ms">image</span>Galeri</button>
+    </div>
+    <button type="button" class="btn btn-text picker-cancel" id="photoPickerCancelBtn">Batal</button>
   </div>
 </div>
 
