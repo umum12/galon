@@ -72,12 +72,6 @@
           <div class="tb-sub" id="scClock">—</div>
         </div>
       </div>
-      <div class="tb-right">
-        <button type="button" class="tb-user" id="menuBtn" title="Akun" aria-label="Akun dan menu">
-          <span class="tb-avatar" id="scAvatar">?</span>
-          <span class="tb-user-text"><span class="tb-nama" id="scNama">—</span><span class="tb-role" id="scRole">—</span></span>
-        </button>
-      </div>
     </header>
 
     <!-- KARTU STOK -->
@@ -97,13 +91,13 @@
         <div class="sc-unit" id="scUnit">Galon Tersisa</div>
       </div>
       <div class="sc-stats">
-        <div class="stat-chip masuk">
-          <span class="stat-icon"><span class="ms">arrow_upward</span></span>
-          <span class="stat-text"><span class="stat-label" id="statMasukLabel">—</span><span class="stat-value" id="statMasuk">0</span></span>
-        </div>
         <div class="stat-chip keluar">
           <span class="stat-icon"><span class="ms">arrow_downward</span></span>
           <span class="stat-text"><span class="stat-label" id="statKeluarLabel">—</span><span class="stat-value" id="statKeluar">0</span></span>
+        </div>
+        <div class="stat-chip masuk">
+          <span class="stat-icon"><span class="ms">arrow_upward</span></span>
+          <span class="stat-text"><span class="stat-label" id="statMasukLabel">—</span><span class="stat-value" id="statMasuk">0</span></span>
         </div>
       </div>
     </section>
@@ -114,10 +108,10 @@
     <!-- FORM -->
     <section class="form-card" id="formCard" data-mode="AMBIL">
       <div class="demo-notice hidden" id="demoNotice"><span class="ms ms-20">lock</span>Mode Demo — tidak dapat menyimpan transaksi</div>
-      <div class="mode-banner" id="modeBanner" role="status"><span class="ms ms-20" id="modeBannerIc">arrow_downward</span><span id="modeBannerText">Pengambilan galon</span></div>
+      <div class="mode-banner" id="modeBanner" role="status"><span class="ms ms-20" id="modeBannerIc">logout</span><span id="modeBannerText">Pengambilan galon</span></div>
       <div class="mode-toggle" role="group" aria-label="Jenis transaksi">
-        <button class="mode-btn active ambil" id="modeAmbilBtn"><span class="ms seg-ic">arrow_downward</span>Ambil</button>
-        <button class="mode-btn datang" id="modeDatangBtn"><span class="ms seg-ic">arrow_upward</span>Datang</button>
+        <button class="mode-btn active ambil" id="modeAmbilBtn"><span class="ms seg-ic">logout</span>Ambil</button>
+        <button class="mode-btn datang" id="modeDatangBtn"><span class="ms seg-ic">login</span>Datang</button>
       </div>
       <div class="qty-row qty-lg">
         <button class="qty-side" id="minusBtn" aria-label="Kurangi"><span class="ms">remove</span></button>
@@ -157,7 +151,7 @@
 
     <!-- RIWAYAT -->
     <section class="history-card">
-      <div class="history-hint">Ketuk ⋯ (atau tekan &amp; tahan) pada transaksi untuk edit atau hapus. Transaksi sebelumnya ada di Riwayat Lengkap.</div>
+      <div class="history-hint">Ketuk ⋯ untuk edit/hapus · data lama di Riwayat Lengkap</div>
       <div class="tx-list" id="txList"></div>
     </section>
 

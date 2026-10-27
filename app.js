@@ -39,14 +39,14 @@ const $ = id => document.getElementById(id);
 const E = {
   loginView: $('loginView'), mainView: $('mainView'),
   codeInput: $('codeInput'), loginBtn: $('loginBtn'), loginError: $('loginError'),
-  stockCard: $('stockCard'), scNama: $('scNama'), scRole: $('scRole'), scAppName: $('scAppName'), scClock: $('scClock'),
-  menuBtn: $('menuBtn'), menuModal: $('menuModal'),
+  stockCard: $('stockCard'), scAppName: $('scAppName'), scClock: $('scClock'),
+  menuModal: $('menuModal'),
   refreshBtn: $('refreshBtn'), adminBtn: $('adminBtn'), logoutBtn: $('logoutBtn'),
   stockNumber: $('stockNumber'), stockStatusPill: $('stockStatusPill'), stockStatusText: $('stockStatusText'),
   statMasuk: $('statMasuk'), statKeluar: $('statKeluar'),
   statMasukLabel: $('statMasukLabel'), statKeluarLabel: $('statKeluarLabel'),
   formCard: $('formCard'), resetFormBtn: $('resetFormBtn'), demoNotice: $('demoNotice'), modeBanner: $('modeBanner'), modeBannerIc: $('modeBannerIc'), modeBannerText: $('modeBannerText'),
-  scUnit: $('scUnit'), scAvatar: $('scAvatar'), stockStatusIcon: $('stockStatusIcon'), menuAvatar: $('menuAvatar'), menuNama: $('menuNama'), menuRole: $('menuRole'),
+  scUnit: $('scUnit'), stockStatusIcon: $('stockStatusIcon'), menuAvatar: $('menuAvatar'), menuNama: $('menuNama'), menuRole: $('menuRole'),
   scSync: $('scSync'), scSyncDot: $('scSyncDot'), scSyncLabel: $('scSyncLabel'),
   timeNowView: $('timeNowView'), timeEditView: $('timeEditView'),
   timeEditBtn: $('timeEditBtn'), timeResetBtn: $('timeResetBtn'),
@@ -247,10 +247,8 @@ function renderStock(animate=false) {
   if (S.user) {
     const role  = S.user.role || 'petugas';
     const label = ROLE_LABEL[role] || role.toUpperCase();
-    E.scNama.textContent = S.user.nama;
-    E.scAvatar.textContent = E.menuAvatar.textContent = String(S.user.nama || '?').trim().charAt(0).toUpperCase();
+    E.menuAvatar.textContent = String(S.user.nama || '?').trim().charAt(0).toUpperCase();
     E.menuNama.textContent = S.user.nama; E.menuRole.textContent = label;
-    E.scRole.textContent = label;
     const isDemo = role === 'demo', isAdmin = role === 'admin';
     E.adminBtn.classList.toggle('hidden', !isAdmin && !isDemo);
     E.demoNotice.classList.toggle('hidden', !isDemo);
@@ -870,7 +868,7 @@ function syncFormTheme() {
   const datang = S.mode === 'DATANG';
   E.formCard.setAttribute('data-mode', datang ? 'DATANG' : 'AMBIL');
   E.formCard.classList.toggle('has-qty', Number.isInteger(S.qty) && S.qty >= 1);
-  E.modeBannerIc.textContent = datang ? 'arrow_upward' : 'arrow_downward';
+  E.modeBannerIc.textContent = datang ? 'login' : 'logout';
   E.modeBannerText.textContent = datang ? 'Stok datang' : 'Pengambilan galon';
 }
 function updateSubmitText() {
@@ -1328,7 +1326,6 @@ function bindEvents() {
   E.loginBtn.addEventListener('click', doLogin);
   E.codeInput.addEventListener('keydown', ev=>{ if(ev.key==='Enter') doLogin(); });
 
-  E.menuBtn.addEventListener('click', ()=>{ setActivity(); openMenu(); });
   E.menuModal.addEventListener('click', ev=>{ if(ev.target===E.menuModal) closeMenu(); });
 
   E.refreshBtn.addEventListener('click', ()=>{ closeMenu(); setActivity(); loadDashboard(false); });
