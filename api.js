@@ -21,7 +21,7 @@
 
   function post(fn, args) {
     var url = window.GALON_API_URL || '';
-    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url))
+    if (!/^https:\/\/script\.google\.com\/(a\/macros\/[^/]+\/|macros\/)s\/[^/]+\/exec$/.test(url))
       return Promise.reject(new Error('Alamat server belum diisi dengan benar (config.js).'));
 
     var body = { fn: fn, args: args };

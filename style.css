@@ -90,14 +90,9 @@ html.icons-ready .ms { opacity: 1; }
 .tb-text { min-width: 0; }
 .tb-title { font-size: 20px; line-height: 24px; font-weight: 500; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-sub { font-size: 12px; line-height: 16px; color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tb-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.tb-user { appearance: none; border: none; background: transparent; color: inherit; text-align: left; cursor: pointer; touch-action: manipulation; display: flex; align-items: center; gap: 8px; padding: 0; border-radius: var(--r-full); }
 .tb-avatar-lg { width: 48px !important; height: 48px !important; font-size: 20px !important; }
 .tb-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--md-primary); color: var(--md-on-primary); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; }
-.tb-user-text { display: none; flex-direction: column; line-height: 1.15; min-width: 0; }
 @media (min-width: 460px) { .tb-user { padding: 4px 12px 4px 4px; background: var(--md-surface-container-high); } .tb-user-text { display: flex; } }
-.tb-nama { font-size: 13px; font-weight: 500; max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-role { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--md-on-surface-variant); }
 .icon-btn {
   appearance: none; border: none; background: transparent; color: var(--md-on-surface-variant);
   width: 48px; height: 48px; border-radius: 50%; cursor: pointer; touch-action: manipulation;
@@ -105,18 +100,17 @@ html.icons-ready .ms { opacity: 1; }
 }
 
 /* Lapisan keadaan (state layer) untuk semua kontrol yang bisa ditekan */
-.btn, .icon-btn, .qty-side, .mode-btn, .nav-item, .menu-item, .ann-ok, .tx-more,
-.sc-sync, .time-link, .photo-source-btn, .mt-nav, .mt-close, .ann-chip, .ann-admin-off, .submit-btn, .btn-render, .photo-remove {
+.btn, .qty-side, .mode-btn, .nav-item, .menu-item, .tx-more,
+.sc-sync, .time-link, .mt-nav, .mt-close, .ann-chip, .ann-admin-off, .submit-btn, .btn-render, .photo-remove {
   position: relative; overflow: hidden;
 }
-.btn::after, .icon-btn::after, .qty-side::after, .mode-btn::after, .nav-item::after,
-.menu-item::after, .ann-ok::after, .tx-more::after, .sc-sync::after, .time-link::after, .photo-source-btn::after,
-.mt-nav::after, .mt-close::after, .ann-chip::after, .ann-admin-off::after, .submit-btn::after, .btn-render::after, .photo-remove::after {
+.btn::after, .qty-side::after, .mode-btn::after, .nav-item::after,
+.menu-item::after, .tx-more::after, .sc-sync::after, .time-link::after, .mt-nav::after, .mt-close::after, .ann-chip::after, .ann-admin-off::after, .submit-btn::after, .btn-render::after, .photo-remove::after {
   content: ''; position: absolute; inset: 0; background: currentColor; opacity: 0; transition: opacity .15s; pointer-events: none;
 }
-.btn:active::after, .icon-btn:active::after, .qty-side:active::after, .mode-btn:active::after,
-.nav-item:active::after, .menu-item:active::after, .ann-ok:active::after, .tx-more:active::after,
-.sc-sync:active::after, .time-link:active::after, .photo-source-btn:active::after, .mt-nav:active::after, .mt-close:active::after,
+.btn:active::after, .qty-side:active::after, .mode-btn:active::after,
+.nav-item:active::after, .menu-item:active::after, .tx-more:active::after,
+.sc-sync:active::after, .time-link:active::after, .mt-nav:active::after, .mt-close:active::after,
 .ann-chip:active::after, .ann-admin-off:active::after, .submit-btn:active::after, .btn-render:active::after, .photo-remove:active::after { opacity: .12; }
 button:disabled { cursor: not-allowed; }
 
@@ -214,8 +208,11 @@ button:disabled { cursor: not-allowed; }
   transition: background .35s ease, color .35s ease; position: relative; overflow: hidden;
 }
 .stock-card.safe    { background: var(--md-success-container); color: var(--md-on-success-container); --st: var(--md-success); --on-st: var(--md-on-success); }
-.stock-card.warning { background: var(--md-warning-container); color: var(--md-on-warning-container); --st: var(--md-warning); --on-st: var(--md-on-warning); }
+.stock-card.low     { background: #fff1a6; color: #332800; --st: #7c5e00; --on-st: #ffffff; }
+.stock-card.alert   { background: #ffd8b0; color: #331500; --st: #b04a00; --on-st: #ffffff; }
 .stock-card.danger  { background: var(--md-error-container);   color: var(--md-on-error-container);   --st: var(--md-error);   --on-st: var(--md-on-error); }
+.stock-card.empty   { background: #dcdce2; color: #1b1b1f; --st: #5b5c66; --on-st: #ffffff; }
+.stock-card.minus   { background: #dcc6f2; color: #1d0836; --st: #4a148c; --on-st: #ffffff; }
 .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sc-sync {
   appearance: none; border: none; background: rgba(255,255,255,.55); color: inherit; border-radius: var(--r-md);
@@ -269,7 +266,7 @@ button:disabled { cursor: not-allowed; }
 .sc-unit { font-weight: 700; opacity: .7; letter-spacing: .14em; }
 /* chip status berdenyut saat MENIPIS / DARURAT (setara titik denyut referensi) */
 @keyframes chipPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st) 55%, transparent); } 50% { box-shadow: 0 0 0 7px transparent; } }
-.stock-card.warning .status-chip, .stock-card.danger .status-chip { animation: chipPulse 1.4s ease-in-out infinite; }
+.stock-card.alert .status-chip, .stock-card.danger .status-chip, .stock-card.minus .status-chip { animation: chipPulse 1.4s ease-in-out infinite; }
 /* pengumuman: strip beraksen dengan lencana ikon persegi bulat */
 .ann-list { gap: 8px; }
 
@@ -365,8 +362,6 @@ button:disabled { cursor: not-allowed; }
 
 /* 11. RIWAYAT TRANSAKSI ─────────────────────────────────────────── */
 .history-card { margin: 0 12px; background: var(--md-surface-container-lowest); border-radius: var(--r-xl); padding: 16px 12px 14px; box-shadow: var(--e1); }
-.history-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
-.tx-count-badge { font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--md-on-surface-variant); }
 .history-hint { font-size: 12px; color: var(--md-on-surface-variant); padding: 4px 4px 10px; }
 .tx-list { display: flex; flex-direction: column; gap: 6px; }
 .tx-date-hdr { font-size: 12px; font-weight: 500; letter-spacing: .04em; color: var(--md-primary); padding: 10px 4px 4px; }
@@ -383,7 +378,6 @@ button:disabled { cursor: not-allowed; }
 .tx-row3 { margin-top: 1px; }
 .tx-nama { font-size: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .tx-nama.tx-when-date { font-size: 14px; display: flex; align-items: center; gap: 6px; }
-.tx-top-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .tx-time { font-size: 12px; font-weight: 500; color: var(--md-on-surface-variant); display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .tx-time.tx-when-time { font-size: 15px; font-weight: 500; color: var(--md-on-surface); }
 .tx-more { appearance: none; border: none; background: transparent; color: var(--md-on-surface-variant); width: 36px; height: 36px; margin: -4px -6px -4px 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: manipulation; }
@@ -396,11 +390,7 @@ button:disabled { cursor: not-allowed; }
 .tx-pill.edit    { background: var(--md-primary-container);   color: var(--md-on-primary-container); }
 .tx-qty { font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .tx-qty.minus { color: var(--md-error); } .tx-qty.plus { color: var(--md-success); } .tx-qty.neutral { color: var(--md-tertiary); }
-.tx-meta-row { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; overflow: hidden; }
-.tx-note { font-size: 12px; color: var(--md-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.tx-right2 { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .tx-sisa { font-size: 11px; color: var(--md-on-surface-variant); font-weight: 500; }
-.tx-photo-link { color: var(--md-primary); display: inline-flex; text-decoration: none; }
 .tx-empty { text-align: center; color: var(--md-on-surface-variant); font-size: 14px; padding: 24px 0; }
 
 /* 11b. RIWAYAT — kartu putih berborder, lencana bulat, kaki kartu bergaris (gaya referensi) ─── */
@@ -414,7 +404,6 @@ button:disabled { cursor: not-allowed; }
 .tx-qty { font-size: 30px; }
 .tx-row3 { margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--md-surface-container); }
 .tx-sisa { font-size: 11px; color: var(--md-on-surface-variant); }
-.tx-note { font-size: 12px; font-weight: 500; }
 /* lembar Riwayat Saya / Lengkap: latar abu muda agar kartu putih menonjol */
 .history-sheet { background: var(--md-surface-container-low); }
 .history-sheet .mt-header { background: var(--md-surface-container-lowest); border-bottom: 1px solid var(--md-outline-variant); padding: 8px 8px 8px 16px; }
@@ -587,7 +576,7 @@ tfoot .mt-masuk-val { color: #7ffc97; } tfoot .mt-keluar-val { color: #ffb4ab; }
 
 /* 15a. POLES: target sentuh 40–48px, fokus keyboard terlihat ─── */
 .tx-more { width: 44px; height: 44px; margin: -6px -8px -6px 0; }
-.time-link, .ann-ok, .ann-admin-off { min-height: 44px; }
+.time-link, .ann-admin-off { min-height: 44px; }
 .ann-chip, .sc-sync { min-height: 40px; }
 .photo-remove { width: 40px; height: 40px; }
 .mt-nav, .mt-close { width: 44px; height: 44px; }
@@ -675,6 +664,15 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .tx-photo-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; border-radius: 12px; background: var(--md-surface-container); color: var(--md-on-surface-variant); font-size: 14px; font-weight: 500; text-decoration: none; }
 .tx-date-hdr { display: flex; align-items: center; gap: 10px; text-transform: uppercase; font-size: 14px; letter-spacing: .03em; padding: 14px 4px 4px; }
 .tx-date-hdr .ms { font-size: 22px; }
+
+/* 15f. LEGENDA 6 TINGKAT STOK (Panel Admin) ─── */
+.lv-legend { display: flex; flex-direction: column; gap: 6px; }
+.lv-row { display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 8px 12px; border-radius: var(--r-md); background: var(--md-surface-container-low); }
+.lv-row b { font-weight: 700; }
+.lv-row span:last-child { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--md-on-surface-variant); }
+.lv-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--lv); flex-shrink: 0; }
+.lv-row.safe { --lv: #006e2d; } .lv-row.low { --lv: #c99a00; } .lv-row.alert { --lv: #e06a00; }
+.lv-row.danger { --lv: #ba1a1a; } .lv-row.empty { --lv: #5b5c66; } .lv-row.minus { --lv: #4a148c; }
 
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {

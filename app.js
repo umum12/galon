@@ -32,7 +32,7 @@ const S = {
 };
 
 /* Monthly table state */
-const MT = { year: 0, month: 0, loading: false, lastData: null };
+const MT = { year: 0, month: 0, loading: false, lastData: null, seq: 0 };
 
 /* ── DOM REFS ────────────────── */
 const $ = id => document.getElementById(id);
@@ -67,7 +67,7 @@ const E = {
   adminModal: $('adminModal'),
   correctStockInput: $('correctStockInput'), correctNoteInput: $('correctNoteInput'),
   correctStockBtn: $('correctStockBtn'),
-  warnInput: $('warnInput'), dangerInput: $('dangerInput'), appNameInput: $('appNameInput'),
+  appNameInput: $('appNameInput'),
   saveConfigBtn: $('saveConfigBtn'), closeAdminBtn: $('closeAdminBtn'),
   reloadConfigBtn: $('reloadConfigBtn'), reloadTxBtn: $('reloadTxBtn'), reloadAllBtn: $('reloadAllBtn'),
   adminStockInfo: $('adminStockInfo'),
@@ -203,7 +203,8 @@ function loadCache()  { try { const r=localStorage.getItem(CACHE_KEY); return r?
 function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch(_){} }
 
 /* ── SESSION ─────────────────── */
-function setActivity() { S.lastActivity = Date.now(); saveCache(); }
+let _actSaved = 0;
+function setActivity() { S.lastActivity = Date.now(); if (S.lastActivity - _actSaved > 2000) { _actSaved = S.lastActivity; saveCache(); } }   /* tulis localStorage maks. tiap 2 dtk */
 function startIdleWatcher() {
   if (S.idleTimer) clearInterval(S.idleTimer);
   S.idleTimer = setInterval(() => { if (S.token && Date.now()-S.lastActivity>IDLE_MS) doLogout(true); }, 15000);
@@ -226,8 +227,12 @@ function toast(msg, type='', ms) {
 }
 
 /* ── CLOCK ───────────────────── */
+let _lastDay = '';
 function updateClock() {
   const now  = new Date();
+  const dayKey = toISODate(now);
+  if (_lastDay && dayKey !== _lastDay && S.token) renderRecent();   /* lewat tengah malam: Hari Ini/Kemarin bergeser */
+  _lastDay = dayKey;
   const hari = HARI_ID[now.getDay()];
   const tgl  = now.getDate();
   const bln  = BULAN_SHORT_ID[now.getMonth()+1];
@@ -240,6 +245,25 @@ function updateClock() {
 setInterval(updateClock, 1000);
 
 /* ███ 2. STOK & RIWAYAT: render, tekan-tahan, hapus, edit ███ */
+/* ── TINGKAT STOK (6 warna, ambang tetap; dihitung di klien dari jumlah galon) ──
+   ≥24 Aman · 16–23 Menipis · 8–15 Waspada · 1–7 Darurat · 0 Habis · <0 Stok Minus */
+const STOCK_LEVELS = {
+  safe:   { key:'safe',   label:'AMAN',       icon:'verified_user', unit:'Galon Tersisa' },
+  low:    { key:'low',    label:'MENIPIS',    icon:'trending_down', unit:'Galon Tersisa' },
+  alert:  { key:'alert',  label:'WASPADA',    icon:'warning',       unit:'Galon Tersisa' },
+  danger: { key:'danger', label:'DARURAT',    icon:'crisis_alert',  unit:'Galon Tersisa' },
+  empty:  { key:'empty',  label:'HABIS',      icon:'block',         unit:'Galon Habis' },
+  minus:  { key:'minus',  label:'STOK MINUS', icon:'remove_circle', unit:'Galon Minus · Cek Pencatatan' },
+};
+function stockLevel(n) {
+  n = Math.trunc(Number(n)) || 0;
+  if (n < 0)   return 'minus';
+  if (n === 0) return 'empty';
+  if (n <= 7)  return 'danger';
+  if (n <= 15) return 'alert';
+  if (n <= 23) return 'low';
+  return 'safe';
+}
 /* ── RENDER: STOCK ───────────── */
 function renderStock(animate=false) {
   document.title = S.appName;
@@ -267,11 +291,11 @@ function renderStock(animate=false) {
     void E.stockNumber.offsetWidth;
     E.stockNumber.classList.add('pop');
   }
-  E.stockCard.className = `stock-card ${S.status}`;
-  const pills = { safe:'AMAN', warning:'MENIPIS', danger:'DARURAT' };
-  E.stockStatusText.textContent = S.stock < 0 ? 'MINUS' : (pills[S.status] || 'AMAN');
-  E.stockStatusIcon.textContent = S.stock < 0 ? 'error' : ({ safe:'verified_user', warning:'warning', danger:'error' }[S.status] || 'verified_user');
-  E.scUnit.textContent = S.stock < 0 ? 'Galon Minus · Cek Pencatatan' : 'Galon Tersisa';
+  const lv = STOCK_LEVELS[stockLevel(S.stock)];
+  E.stockCard.className = `stock-card ${lv.key}`;
+  E.stockStatusText.textContent = lv.label;
+  E.stockStatusIcon.textContent = lv.icon;
+  E.scUnit.textContent = lv.unit;
   E.statMasuk.textContent  = S.month.masuk;
   E.statKeluar.textContent = S.month.keluar;
   E.statMasukLabel.textContent  = S.monthLabel;
@@ -298,7 +322,8 @@ function buildTxItem(tx, colorClass, mine) {
     (tx.susulan  ? txPill('susulan', 'history_toggle_off', 'Susulan') : '') +
     (tx.editedAt ? txPill('edit',    'edit',               'Edit')    : '');
   const noteHtml  = tx.note ? `<div class="tx-note-box">${ic('chat','ms-20')}<span class="tx-note-text">${esc(tx.note)}</span></div>` : '';
-  const photoHtml = tx.photoUrl ? `<a class="tx-photo-chip" href="${esc(tx.photoUrl)}" target="_blank" rel="noopener" aria-label="Foto invoice">${ic('photo_camera','ms-18')}Foto</a>` : '';
+  const photoUrl  = /^https?:\/\//i.test(String(tx.photoUrl || '')) ? String(tx.photoUrl) : '';   /* tolak javascript:/data: */
+  const photoHtml = photoUrl ? `<a class="tx-photo-chip" href="${esc(photoUrl)}" target="_blank" rel="noopener" aria-label="Foto invoice">${ic('photo_camera','ms-18')}Foto</a>` : '';
   const stamp = tx.editedAt
     ? `diedit ${esc(formatDicatat(tx.editedAt))}`
     : `dicatat ${esc(formatDicatat(tx.timestamp))}`;
@@ -561,7 +586,6 @@ function updateMtNavBounds(prevBtn, nextBtn) {
   nextBtn.disabled = (MT.year === MT_YEAR_MAX && MT.month === 12);
 }
 function stepReportMonth(delta) {
-  if (MT.loading) return;
   let m = MT.month + delta, y = MT.year;
   if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
   if (y < MT_YEAR_MIN || y > MT_YEAR_MAX) return;
@@ -575,7 +599,7 @@ function renderFromPicker() {
 }
 
 function fetchMonthlyTable() {
-  if (MT.loading) return;
+  const seq = ++MT.seq;
   MT.loading = true;
 
   showReportScreen();
@@ -590,12 +614,17 @@ function fetchMonthlyTable() {
 
   google.script.run
     .withSuccessHandler(res => {
+      if (seq !== MT.seq) return;   /* jawaban basi */
       MT.loading = false;
       E.mtLoading.classList.add('hidden');
-      if (!res || !res.ok) { toast((res&&res.message)||'Gagal memuat tabel.','err'); return; }
+      if (!res || !res.ok) {
+        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
+        toast((res&&res.message)||'Gagal memuat tabel.','err'); return;
+      }
       renderMonthlyTable(res);
     })
     .withFailureHandler(err => {
+      if (seq !== MT.seq) return;
       MT.loading = false;
       E.mtLoading.classList.add('hidden');
       toast((err&&err.message)||'Gagal memuat tabel.','err');
@@ -795,7 +824,7 @@ window.addEventListener('afterprint', () => document.body.classList.remove('mt-p
 /* ███ 4. RIWAYAT LENGKAP & RIWAYAT SAYA ███ */
 /* ── RIWAYAT LENGKAP & RIWAYAT SAYA (2 minggu, edit/hapus lewat tekan & tahan) ──
    Satu modal, dua mode: mine=false → semua orang; mine=true → hanya milik pengguna (disaring di server). */
-const HIST = { loading: false, items: [], days: 14, mine: false };
+const HIST = { loading: false, items: [], days: 14, mine: false, seq: 0 };   /* seq: hanya jawaban permintaan TERAKHIR yang dipakai */
 
 function isHistoryOpen() { return !E.historyModal.classList.contains('hidden'); }
 
@@ -813,7 +842,7 @@ function closeHistory() { E.historyModal.classList.add('hidden'); navReset(HIST.
 
 /* keepScroll=true: dipanggil setelah edit/hapus — daftar disegarkan tanpa loncat ke atas. */
 function fetchFullHistory(keepScroll) {
-  if (HIST.loading) return;
+  const seq = ++HIST.seq;
   HIST.loading = true;
   if (!keepScroll) {
     E.historyLoading.classList.remove('hidden');
@@ -822,6 +851,7 @@ function fetchFullHistory(keepScroll) {
   }
   google.script.run
     .withSuccessHandler(res => {
+      if (seq !== HIST.seq) return;   /* jawaban basi (mode/permintaan sudah berganti) */
       HIST.loading = false;
       E.historyLoading.classList.add('hidden');
       if (!res || !res.ok) {
@@ -833,6 +863,7 @@ function fetchFullHistory(keepScroll) {
       renderHistory();
     })
     .withFailureHandler(err => {
+      if (seq !== HIST.seq) return;
       HIST.loading = false;
       E.historyLoading.classList.add('hidden');
       toast((err && err.message) || 'Gagal memuat riwayat.','err');
@@ -1147,7 +1178,7 @@ function compressImage(file,maxW=1280,q=0.72) {
 function openAdmin() {
   const demo=isDemo();
   E.correctStockInput.value=''; E.correctNoteInput.value='';
-  E.warnInput.value=S.warning; E.dangerInput.value=S.danger; E.appNameInput.value=S.appName;
+  E.appNameInput.value=S.appName;
   E.correctStockBtn.disabled=demo; E.correctStockBtn.innerHTML=demo?ic('lock','ms-20')+'Mode Demo':'Simpan Koreksi';
   E.saveConfigBtn.disabled=demo;   E.saveConfigBtn.innerHTML=demo?ic('lock','ms-20')+'Mode Demo':'Simpan Setting';
   [E.reloadConfigBtn,E.reloadTxBtn,E.reloadAllBtn].forEach(b=>{ b.disabled=demo; });
@@ -1181,7 +1212,7 @@ function doSaveConfig() {
       applyData(res); toast(res.message||'Setting tersimpan.','ok'); closeAdmin();
     })
     .withFailureHandler(err=>{ E.saveConfigBtn.disabled=false; E.saveConfigBtn.textContent='Simpan Setting'; toast((err&&err.message)||'Gagal.','err'); })
-    .updateConfig(S.token,{WARNING_LEVEL:E.warnInput.value.trim(),DANGER_LEVEL:E.dangerInput.value.trim(),APP_NAME:E.appNameInput.value.trim()});
+    .updateConfig(S.token,{APP_NAME:E.appNameInput.value.trim()});
 }
 
 function runReloadCache(btn, label, fnName) {
@@ -1321,8 +1352,17 @@ function doDeactivateAnn(id, btn) {
 }
 
 /* ███ 7. EVENT & INIT ███ */
+/* Esc menutup dialog/lembar yang paling atas. */
+function closeTopDialog() {
+  const order = [['confirmModal', hideConfirm], ['pickerModal', closePhotoPicker], ['editModal', closeEditModal], ['deleteModal', closeDeleteModal],
+                 ['adminModal', closeAdmin], ['menuModal', closeMenu], ['monthlyModal', closeMonthlyTable], ['historyModal', closeHistory]];
+  for (const [id, fn] of order) if (!E[id].classList.contains('hidden')) { fn(); return true; }
+  return false;
+}
 /* ── EVENTS ──────────────────── */
 function bindEvents() {
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && closeTopDialog()) ev.preventDefault(); });
+  window.addEventListener('pagehide', saveCache);   /* simpan aktivitas terakhir saat aplikasi ditutup */
   E.loginBtn.addEventListener('click', doLogin);
   E.codeInput.addEventListener('keydown', ev=>{ if(ev.key==='Enter') doLogin(); });
 
@@ -1459,7 +1499,7 @@ function init() {
   bindKeyboardAwareScroll();
   updateClock();
   const cache = loadCache();
-  if (!cache||!cache.token||!cache.expiresAt||Date.now()>cache.expiresAt) {
+  if (!cache||!cache.token||Date.now()-(cache.lastActivity||0)>IDLE_MS) {   /* sesi geser: kedaluwarsa bila tak aktif 30 menit (server memperpanjang tiap panggilan) */
     clearCache(); showView('login'); setTimeout(()=>E.codeInput.focus(),80); Splash.finish(true); return;
   }
   Object.assign(S, {

@@ -1,5 +1,5 @@
-/* Service worker Galon App — shell aplikasi bisa dibuka tanpa jaringan; data selalu dari server. Build: 20261027002444 */
-const VERSION = 'galon-20261027002444';
+/* Service worker Galon App — shell aplikasi bisa dibuka tanpa jaringan; data selalu dari server. Build: 20261027065222 */
+const VERSION = 'galon-20261027065222';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'api.js', 'config.js', 'pwa.js', 'manifest.webmanifest',
                'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png'];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
@@ -23,7 +23,7 @@ self.addEventListener('fetch', e => {
     );
   } else if (FONT_HOSTS.includes(url.hostname)) {         // font: cache dulu, perbarui di belakang
     e.respondWith(caches.open(VERSION).then(c => c.match(req).then(hit => {
-      const net = fetch(req).then(res => { c.put(req, res.clone()); return res; }).catch(() => hit);
+      const net = fetch(req).then(res => { c.put(req, res.clone()); return res; }).catch(() => hit || Response.error());
       return hit || net;
     })));
   }
