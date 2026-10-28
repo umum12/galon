@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#2151da">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Galon">
+  <meta name="apple-mobile-web-app-title" content="Galon App">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
@@ -198,21 +198,15 @@
       <button class="btn btn-purple btn-block" id="correctStockBtn">Simpan Koreksi</button>
     </div>
     <div class="admin-block">
-      <div class="admin-block-title"><span class="ms ms-20" aria-hidden="true">campaign</span>Pengumuman</div>
-      <div class="admin-block-desc">Pengingat yang tampil sebagai teks berjalan di aplikasi petugas selama masa berlaku, lalu hilang otomatis. Gunakan "Nonaktifkan" untuk menghentikannya lebih awal.</div>
-      <div class="admin-row">
-        <label class="tf sel always"><select id="annTipe"><option value="INFO">Info</option><option value="PERINGATAN">Peringatan</option></select><span class="tf-label">Tipe</span></label>
-        <label class="tf sel always"><select id="annDays"><option value="1">1 hari</option><option value="3" selected>3 hari</option><option value="7">7 hari</option><option value="14">14 hari</option></select><span class="tf-label">Berlaku</span></label>
-      </div>
-      <div class="admin-field"><label class="cap">Tujuan <span class="time-hint">(tidak dipilih = semua petugas)</span></label><div class="ann-chips" id="annChips"></div></div>
-      <label class="tf"><textarea id="annPesan" maxlength="300" rows="3" placeholder=" "></textarea><span class="tf-label">Tulis pengumuman (maks. 300 karakter)</span></label>
-      <button type="button" class="btn btn-ghost btn-block" id="annTemplateBtn"><span class="ms ms-20" aria-hidden="true">edit_note</span>Isi templat: stok tidak cocok</button>
-      <button type="button" class="btn btn-primary btn-block" id="annSendBtn"><span class="ms ms-20" aria-hidden="true">send</span>Kirim Pengumuman</button>
-      <div class="ann-admin-list" id="annAdminList"></div>
+      <div class="admin-block-title"><span class="ms ms-20" aria-hidden="true">campaign</span>Running Text</div>
+      <div class="admin-block-desc">Satu teks berjalan di bagian atas aplikasi untuk semua pengguna (petugas, admin, demo). Tampil terus tanpa batas waktu sampai Anda mengedit atau menghapusnya.</div>
+      <label class="tf"><textarea id="annPesan" maxlength="300" rows="3" placeholder=" "></textarea><span class="tf-label">Teks running text (maks. 300 karakter)</span></label>
+      <button type="button" class="btn btn-primary btn-block" id="annSendBtn"><span class="ms ms-20" aria-hidden="true">send</span>Kirim Running Text</button>
+      <button type="button" class="btn btn-ghost btn-block hidden" id="annDeleteBtn"><span class="ms ms-20" aria-hidden="true">delete</span>Hapus Running Text</button>
     </div>
     <div class="admin-block">
-      <div class="admin-block-title"><span class="ms ms-20" aria-hidden="true">tune</span>Setting</div>
-      <div class="admin-block-desc">Warna dan status stok memakai 6 tingkat tetap (menurut jumlah galon), tidak bisa diubah di sini:</div>
+      <div class="admin-block-title"><span class="ms ms-20" aria-hidden="true">tune</span>Status Stok</div>
+      <div class="admin-block-desc">Warna dan status stok memakai 6 tingkat tetap (menurut jumlah galon). Nama aplikasi juga tetap: Galon App.</div>
       <div class="lv-legend">
         <div class="lv-row safe"><span class="lv-dot"></span><b>Aman</b><span>≥ 24</span></div>
         <div class="lv-row low"><span class="lv-dot"></span><b>Menipis</b><span>16 – 23</span></div>
@@ -221,8 +215,6 @@
         <div class="lv-row empty"><span class="lv-dot"></span><b>Habis</b><span>0</span></div>
         <div class="lv-row minus"><span class="lv-dot"></span><b>Stok Minus</b><span>&lt; 0</span></div>
       </div>
-      <label class="tf"><input id="appNameInput" type="text" placeholder=" " maxlength="40"><span class="tf-label">Nama Aplikasi</span></label>
-      <button class="btn btn-primary btn-block" id="saveConfigBtn">Simpan Setting</button>
     </div>
     <div class="admin-block">
       <div class="admin-block-title"><span class="ms ms-20" aria-hidden="true">build</span>Maintenance</div>

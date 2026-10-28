@@ -1,5 +1,6 @@
 /* ███ 1. INTI: konstanta, state, util, cache, sesi, toast, jam ███ */
 /* ── CONSTANTS ───────────────── */
+const APP_NAME      = 'Galon App';   /* nama aplikasi TETAP (tidak ada pengaturan di UI; server tidak mengubahnya) */
 const CACHE_KEY     = 'galon_v2';
 const IDLE_MS       = 30 * 60 * 1000;
 const LONG_PRESS_MS = 500;
@@ -17,7 +18,7 @@ const ROLE_LABEL = { petugas: 'FACILITY SUPPORT', admin: 'ADMIN', demo: 'DEMO' }
 const S = {
   token: null, user: null, expiresAt: 0,
   stock: 0, warning: 20, danger: 10,
-  appName: 'Galon App', status: 'safe',
+  appName: APP_NAME, status: 'safe',
   recent: [], month: { masuk: 0, keluar: 0 }, monthLabel: '—',
   mode: 'AMBIL', qty: 0,
   photoDataUrl: '', photoName: '',
@@ -25,7 +26,7 @@ const S = {
   submitState: 'idle',
   pendingDelete: null,
   pendingEdit: null,
-  ann: [], annAdmin: [], annPetugas: [], annSel: [],   /* pengumuman */
+  ann: [],   /* running text */
   syncing: false, syncError: false, lastSync: 0,       /* status sinkron data */
   flash: '',                                           /* kunci transaksi yang disorot sebentar */
   txCustom: false,            /* true = user memilih tanggal/jam sendiri */
@@ -101,8 +102,7 @@ const E = {
   adminModal: $('adminModal'),
   correctStockInput: $('correctStockInput'), correctNoteInput: $('correctNoteInput'),
   correctStockBtn: $('correctStockBtn'),
-  appNameInput: $('appNameInput'),
-  saveConfigBtn: $('saveConfigBtn'), closeAdminBtn: $('closeAdminBtn'),
+  closeAdminBtn: $('closeAdminBtn'),
   reloadConfigBtn: $('reloadConfigBtn'), reloadTxBtn: $('reloadTxBtn'), reloadAllBtn: $('reloadAllBtn'),
   adminStockInfo: $('adminStockInfo'),
   deleteModal: $('deleteModal'),
@@ -231,7 +231,7 @@ function formatTanggalID(raw) {
 
 /* ── CACHE ───────────────────── */
 function saveCache() {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ token:S.token, user:S.user, expiresAt:S.expiresAt, lastActivity:S.lastActivity, stock:S.stock, warning:S.warning, danger:S.danger, appName:S.appName, status:S.status, recent:S.recent, month:S.month, monthLabel:S.monthLabel, ann:S.ann, lastSync:S.lastSync, skewMs:S.skewMs })); } catch(_) {}
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ token:S.token, user:S.user, expiresAt:S.expiresAt, lastActivity:S.lastActivity, stock:S.stock, warning:S.warning, danger:S.danger, status:S.status, recent:S.recent, month:S.month, monthLabel:S.monthLabel, ann:S.ann, lastSync:S.lastSync, skewMs:S.skewMs })); } catch(_) {}
 }
 function loadCache()  { try { const r=localStorage.getItem(CACHE_KEY); return r?JSON.parse(r):null; } catch(_){return null;} }
 function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch(_){} }
@@ -300,8 +300,8 @@ function stockLevel(n) {
 }
 /* ── RENDER: STOCK ───────────── */
 function renderStock(animate=false) {
-  document.title = S.appName;
-  E.scAppName.textContent = S.appName;
+  document.title = APP_NAME;
+  E.scAppName.textContent = APP_NAME;
   if (S.user) {
     const role  = S.user.role || 'petugas';
     const label = ROLE_LABEL[role] || role.toUpperCase();
@@ -1072,17 +1072,14 @@ function applyData(res) {
   if(res.stock!==undefined)  S.stock  =Number(res.stock);
   if(res.warning!==undefined)S.warning=Number(res.warning);
   if(res.danger!==undefined) S.danger =Number(res.danger);
-  if(res.appName!==undefined)S.appName=res.appName;
   if(res.status!==undefined) S.status =res.status;
   if(res.recent!==undefined) S.recent =res.recent;
   if(res.month!==undefined)  S.month  =res.month;
   if(res.monthLabel!==undefined) S.monthLabel=res.monthLabel;
   if(res.user!==undefined)   S.user   =res.user;
   if(res.announcements!==undefined)      S.ann = res.announcements;
-  if(res.announcementsAdmin!==undefined) S.annAdmin = res.announcementsAdmin;
-  if(res.annPetugas!==undefined)         S.annPetugas = res.annPetugas;
   if(res.stock!==undefined)              { S.lastSync = Date.now(); S.syncError = false; }   /* respons berisi stok = data segar */
-  renderStock(prev!==S.stock); renderRecent(); renderAnnouncements(); renderAnnouncementAdmin(); renderSync(); saveCache();
+  renderStock(prev!==S.stock); renderRecent(); renderAnnouncements(); renderRunningTextAdmin(); renderSync(); saveCache();
 }
 
 /* ── LOGIN / LOGOUT ──────────── */
@@ -1112,7 +1109,7 @@ function doLogout(fromIdle=false) {
   if(fromIdle) saveDraft();   /* sesi habis mendadak: jangan hilangkan isian */
   if(S.token) google.script.run.logout(S.token);
   clearCache();
-  Object.assign(S,{token:null,user:null,expiresAt:0,stock:0,recent:[],month:{masuk:0,keluar:0},monthLabel:'—',qty:1,photoDataUrl:'',photoName:'',pendingDelete:null,ann:[],annAdmin:[],annPetugas:[],annSel:[],syncing:false,syncError:false,lastSync:0,flash:''});
+  Object.assign(S,{token:null,user:null,expiresAt:0,stock:0,recent:[],month:{masuk:0,keluar:0},monthLabel:'—',qty:1,photoDataUrl:'',photoName:'',pendingDelete:null,ann:[],syncing:false,syncError:false,lastSync:0,flash:''});
   if(S.idleTimer){clearInterval(S.idleTimer);S.idleTimer=null;}
   showView('login'); E.codeInput.value=''; setLoginError('');
   if(fromIdle) toast('Sesi berakhir. Silakan masuk lagi.');
@@ -1225,9 +1222,7 @@ function compressImage(file,maxW=1280,q=0.72) {
 function openAdmin() {
   const demo=isDemo();
   E.correctStockInput.value=''; E.correctNoteInput.value='';
-  E.appNameInput.value=S.appName;
   E.correctStockBtn.disabled=demo; E.correctStockBtn.innerHTML=demo?ic('lock','ms-20')+'Mode Demo':'Simpan Koreksi';
-  E.saveConfigBtn.disabled=demo;   E.saveConfigBtn.innerHTML=demo?ic('lock','ms-20')+'Mode Demo':'Simpan Setting';
   [E.reloadConfigBtn,E.reloadTxBtn,E.reloadAllBtn].forEach(b=>{ b.disabled=demo; });
   onAdminOpenAnnouncements(demo);
   E.adminModal.classList.remove('hidden');
@@ -1249,19 +1244,6 @@ function doCorrectStock() {
     .withFailureHandler(err=>{ E.correctStockBtn.disabled=false; E.correctStockBtn.textContent='Simpan Koreksi'; toast((err&&err.message)||'Gagal.','err'); })
     .correctStock(S.token,parseInt(val,10),note);
 }
-function doSaveConfig() {
-  if(isDemo()){toast('Mode demo — tidak dapat menyimpan.','err');return;}
-  E.saveConfigBtn.disabled=true; E.saveConfigBtn.textContent='Menyimpan…';
-  google.script.run
-    .withSuccessHandler(res=>{
-      E.saveConfigBtn.disabled=false; E.saveConfigBtn.textContent='Simpan Setting';
-      if(!res||!res.ok){toast((res&&res.message)||'Gagal.','err');return;}
-      applyData(res); toast(res.message||'Setting tersimpan.','ok'); closeAdmin();
-    })
-    .withFailureHandler(err=>{ E.saveConfigBtn.disabled=false; E.saveConfigBtn.textContent='Simpan Setting'; toast((err&&err.message)||'Gagal.','err'); })
-    .updateConfig(S.token,{APP_NAME:E.appNameInput.value.trim()});
-}
-
 function runReloadCache(btn, label, fnName) {
   if(isDemo()){toast('Mode demo — tidak dapat memuat ulang cache.','err');return;}
   const original=btn.innerHTML;
@@ -1279,123 +1261,82 @@ function doReloadConfigCache()      { runReloadCache(E.reloadConfigBtn, 'Config 
 function doReloadTransactionCache() { runReloadCache(E.reloadTxBtn,     'Transaction cache',  'reloadTransactionCache'); }
 function doReloadAllCache()         { runReloadCache(E.reloadAllBtn,    'Semua cache',        'reloadAllCache'); }
 
-/* ███ 6. PENGUMUMAN: banner petugas & panel admin ███ */
-/* ── PENGUMUMAN (banner petugas + panel admin) ── */
-const A = {
-  list: $('annList'), tipe: $('annTipe'), days: $('annDays'), chips: $('annChips'),
-  pesan: $('annPesan'), tplBtn: $('annTemplateBtn'), sendBtn: $('annSendBtn'), adminList: $('annAdminList'),
-};
+/* ███ 6. RUNNING TEXT: teks berjalan untuk semua role + form admin ███ */
+/* Satu teks berjalan tanpa batas waktu (tampil untuk petugas, admin, dan demo) sampai admin mengedit/menghapusnya.
+   Admin: satu kolom teks; tombol "Kirim Running Text" bila belum ada, "Edit Running Text" bila sudah ada, plus "Hapus". */
+const A = { list: $('annList'), pesan: $('annPesan'), sendBtn: $('annSendBtn'), delBtn: $('annDeleteBtn') };
 
-/* Pengumuman = teks berjalan (marquee) selama masa berlaku; hilang otomatis saat kedaluwarsa atau dinonaktifkan admin. */
+function currentRunningText() { return (S.ann && S.ann[0]) ? String(S.ann[0].pesan || '') : ''; }
+
 function renderAnnouncements() {
-  const list = S.ann || [];
+  const text = currentRunningText().replace(/\s*\n\s*/g, ' ').trim();
   A.list.innerHTML = '';
-  if (!list.length) { A.list.classList.add('hidden'); return; }
-  const warn = list.some(a => a.tipe === 'PERINGATAN');
-  const flat = a => String(a.pesan || '').replace(/\s*\n\s*/g, ' ');
-  const body = list.map(a =>
-    `<span class="ann-seg"><b>${a.tipe === 'PERINGATAN' ? 'Peringatan' : 'Pengumuman'}:</b> ${esc(flat(a))}</span>`
-  ).join('<span class="ann-sep" aria-hidden="true">•</span>');
-  const chars = list.reduce((n, a) => n + flat(a).length + 14, 0);
-  const dur   = Math.max(14, Math.round(chars * 0.16));   /* kecepatan baca tetap, lebih panjang = lebih lama */
-  const full  = list.map(a => (a.tipe === 'PERINGATAN' ? 'Peringatan: ' : 'Pengumuman: ') + flat(a)).join(' • ');
+  if (!text) { A.list.classList.add('hidden'); return; }
+  const dur = Math.max(14, Math.round((text.length + 14) * 0.16));   /* kecepatan baca tetap: lebih panjang = lebih lama */
   A.list.innerHTML =
-    `<div class="ann-strip ${warn ? 'warn' : 'info'}" role="marquee" title="${esc(full)}">` +
-      ic(warn ? 'warning' : 'campaign', 'ann-lead') +
-      `<div class="ann-marquee"><div class="ann-marquee-content" style="animation-duration:${dur}s">${body}</div></div>` +
+    `<div class="ann-strip warn" role="marquee" title="${esc(text)}">` +
+      ic('campaign', 'ann-lead') +
+      `<div class="ann-marquee"><div class="ann-marquee-content" style="animation-duration:${dur}s"><span class="ann-seg"><b>Pengumuman:</b> ${esc(text)}</span></div></div>` +
     `</div>`;
   A.list.classList.remove('hidden');
 }
 
-/* ── Panel admin ── */
-function fmtExp(ms) { const d = new Date(ms); return `${pad2(d.getDate())} ${BULAN_SHORT_ID[d.getMonth()+1]} ${toHHMM(d)}`; }
-
-function renderAnnouncementAdmin() {
-  A.chips.innerHTML = '';
-  (S.annPetugas || []).forEach(p => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'ann-chip' + (S.annSel.includes(p.kode) ? ' on' : '');
-    b.textContent = p.nama;
-    b.addEventListener('click', () => {
-      S.annSel = S.annSel.includes(p.kode) ? S.annSel.filter(k => k !== p.kode) : S.annSel.concat(p.kode);
-      renderAnnouncementAdmin();
-    });
-    A.chips.appendChild(b);
-  });
-
-  A.adminList.innerHTML = '';
-  const list = S.annAdmin || [];
-  if (!list.length) { A.adminList.innerHTML = '<div class="admin-current">Belum ada pengumuman aktif.</div>'; return; }
-  list.forEach(a => {
-    const warn = a.tipe === 'PERINGATAN';
-    const div = document.createElement('div');
-    div.className = 'ann-admin-item';
-    div.innerHTML =
-      `<div class="ann-admin-meta"><span>${ic(warn ? 'warning' : 'campaign', 'ms-16')}${warn ? 'Peringatan' : 'Info'} · ${esc(a.targetLabel)}</span><span>s/d ${esc(fmtExp(a.expiresAt))}</span></div>` +
-      `<div class="ann-admin-text">${esc(a.pesan)}</div>` +
-      `<button type="button" class="ann-admin-off">Nonaktifkan</button>`;
-    div.querySelector('.ann-admin-off').addEventListener('click', ev => doDeactivateAnn(a.id, ev.currentTarget));
-    A.adminList.appendChild(div);
-  });
+/* Label tombol mengikuti kondisi: ada running text → Edit (+ Hapus); belum ada → Kirim. */
+function renderRunningTextAdmin() {
+  const has = !!currentRunningText();
+  if (S.annBusy) return;   /* jangan menimpa label "Mengirim…" saat permintaan berjalan */
+  A.sendBtn.innerHTML = isDemo() ? ic('lock','ms-20') + 'Mode Demo'
+                                 : ic(has ? 'edit' : 'send','ms-20') + (has ? 'Edit Running Text' : 'Kirim Running Text');
+  A.delBtn.classList.toggle('hidden', !has);
 }
 
 function onAdminOpenAnnouncements(demo) {
-  A.pesan.value = ''; A.tipe.value = 'INFO'; A.days.value = '3'; S.annSel = [];
-  A.sendBtn.disabled = demo; A.tplBtn.disabled = demo;
-  A.sendBtn.innerHTML = demo ? ic('lock','ms-20') + 'Mode Demo' : ic('send','ms-20') + 'Kirim Pengumuman';
-  renderAnnouncementAdmin();
-  if (!demo) loadDashboard(true);   /* segarkan status baca terbaru (dashboard di-cache, ringan) */
+  A.pesan.value = currentRunningText();
+  A.pesan.disabled = demo; A.sendBtn.disabled = demo; A.delBtn.disabled = demo;
+  renderRunningTextAdmin();
+  if (!demo) loadDashboard(true);   /* segarkan teks terbaru dari server */
 }
 
-function fillAnnTemplate() {
-  A.pesan.value = `Stok fisik tidak cocok dengan catatan sistem (tercatat: ${S.stock} galon). Mohon cek dan segera catat transaksi yang terlewat (ambil / galon datang).`;
-  A.tipe.value = 'PERINGATAN';
-  setActivity();
-}
-
-function sendAnnouncement() {
+function doSaveRunningText() {
   if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
-  const pesan = A.pesan.value.trim();
-  if (!pesan) { toast('Isi pengumuman dulu.','err'); return; }
-  const target = S.annSel.length ? S.annSel : 'ALL';
-  const tujuan = S.annSel.length
-    ? (S.annPetugas || []).filter(p => S.annSel.includes(p.kode)).map(p => p.nama).join(', ')
-    : 'semua petugas';
-  const days = parseInt(A.days.value, 10);
-
-  showConfirm('Kirim Pengumuman?', `Akan tampil ke ${tujuan} selama ${days} hari.`, () => {
-    A.sendBtn.disabled = true; A.sendBtn.innerHTML = loadingBar() + 'Mengirim…';
-    const reset = () => { A.sendBtn.disabled = false; A.sendBtn.innerHTML = ic('send','ms-20') + 'Kirim Pengumuman'; };
-    google.script.run
-      .withSuccessHandler(res => {
-        reset();
-        if (!res || !res.ok) {
-          if (res && res.message === 'SESSION_EXPIRED') { closeAdmin(); doLogout(true); return; }
-          toast((res && res.message) || 'Gagal mengirim.','err'); return;
-        }
-        A.pesan.value = ''; S.annSel = [];
-        applyData(res); toast(res.message || 'Pengumuman terkirim.','ok'); setActivity();
-      })
-      .withFailureHandler(err => { reset(); toast((err && err.message) || 'Gagal mengirim.','err'); })
-      .createAnnouncement(S.token, { pesan, tipe: A.tipe.value, days, target });
-  });
-}
-
-function doDeactivateAnn(id, btn) {
-  if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
-  btn.disabled = true; btn.textContent = 'Memproses…';
+  const pesan = A.pesan.value.trim(), editing = !!currentRunningText();
+  if (!pesan) { toast('Isi teks running text dulu.','err'); return; }
+  if (pesan === currentRunningText()) { toast('Tidak ada perubahan.'); return; }
+  S.annBusy = true; A.sendBtn.disabled = true; A.delBtn.disabled = true;
+  A.sendBtn.innerHTML = loadingBar() + (editing ? 'Menyimpan…' : 'Mengirim…');
+  const done = () => { S.annBusy = false; A.sendBtn.disabled = false; A.delBtn.disabled = false; renderRunningTextAdmin(); };
   google.script.run
     .withSuccessHandler(res => {
+      done();
       if (!res || !res.ok) {
-        btn.disabled = false; btn.textContent = 'Nonaktifkan';
         if (res && res.message === 'SESSION_EXPIRED') { closeAdmin(); doLogout(true); return; }
-        toast((res && res.message) || 'Gagal.','err'); return;
+        toast((res && res.message) || 'Gagal menyimpan.','err'); return;
       }
-      applyData(res); toast(res.message || 'Pengumuman dinonaktifkan.','ok'); setActivity();
+      applyData(res); A.pesan.value = currentRunningText();
+      toast(res.message || 'Running text tersimpan.','ok'); setActivity();
     })
-    .withFailureHandler(err => { btn.disabled = false; btn.textContent = 'Nonaktifkan'; toast((err && err.message) || 'Gagal.','err'); })
-    .deactivateAnnouncement(S.token, id);
+    .withFailureHandler(err => { done(); toast((err && err.message) || 'Gagal menyimpan.','err'); })
+    .saveRunningText(S.token, pesan);
+}
+
+function doDeleteRunningText() {
+  if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
+  showConfirm('Hapus Running Text?', 'Teks berjalan akan hilang dari semua pengguna.', () => {
+    S.annBusy = true; A.sendBtn.disabled = true; A.delBtn.disabled = true; A.delBtn.innerHTML = loadingBar() + 'Menghapus…';
+    const done = () => { S.annBusy = false; A.sendBtn.disabled = false; A.delBtn.disabled = false; A.delBtn.innerHTML = ic('delete','ms-20') + 'Hapus Running Text'; renderRunningTextAdmin(); };
+    google.script.run
+      .withSuccessHandler(res => {
+        done();
+        if (!res || !res.ok) {
+          if (res && res.message === 'SESSION_EXPIRED') { closeAdmin(); doLogout(true); return; }
+          toast((res && res.message) || 'Gagal menghapus.','err'); return;
+        }
+        applyData(res); A.pesan.value = '';
+        toast(res.message || 'Running text dihapus.','ok'); setActivity();
+      })
+      .withFailureHandler(err => { done(); toast((err && err.message) || 'Gagal menghapus.','err'); })
+      .deleteRunningText(S.token);
+  });
 }
 
 /* ███ 7. EVENT & INIT ███ */
@@ -1478,7 +1419,6 @@ function bindEvents() {
 
   /* Admin modal */
   E.correctStockBtn.addEventListener('click', doCorrectStock);
-  E.saveConfigBtn.addEventListener('click',   doSaveConfig);
   E.reloadConfigBtn.addEventListener('click', doReloadConfigCache);
   E.reloadTxBtn.addEventListener('click',     doReloadTransactionCache);
   E.reloadAllBtn.addEventListener('click',    doReloadAllCache);
@@ -1500,8 +1440,8 @@ function bindEvents() {
   E.editModal.addEventListener('click', ev=>{ if(ev.target===E.editModal) closeEditModal(); });
 
   /* Pengumuman (admin) */
-  A.tplBtn.addEventListener('click',  fillAnnTemplate);
-  A.sendBtn.addEventListener('click', sendAnnouncement);
+  A.sendBtn.addEventListener('click', doSaveRunningText);
+  A.delBtn.addEventListener('click',  doDeleteRunningText);
 
   /* Confirm modal (generik) */
   E.confirmYesBtn.addEventListener('click', ()=>{ const cb=_confirmCallback; hideConfirm(); if (cb) cb(); });
@@ -1553,7 +1493,7 @@ function init() {
     token:cache.token, user:cache.user, expiresAt:cache.expiresAt,
     lastActivity:cache.lastActivity||Date.now(),
     stock:cache.stock||0, warning:cache.warning||20, danger:cache.danger||10,
-    appName:cache.appName||'Galon App', status:cache.status||'safe',
+    status:cache.status||'safe',
     recent:cache.recent||[], month:cache.month||{masuk:0,keluar:0}, monthLabel:cache.monthLabel||'—', ann:cache.ann||[], lastSync:cache.lastSync||0, skewMs:cache.skewMs||0,
   });
   showView('main'); setMode('AMBIL');
