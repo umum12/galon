@@ -67,7 +67,7 @@ function restoreDraft() {
 }
 
 /* Monthly table state */
-const MT = { year: 0, month: 0, loading: false, lastData: null, seq: 0 };
+const MT = { year: 0, month: 0, loading: false, lastData: null, seq: 0, tab: 'table', cache: {}, histSeq: 0, histErr: false };
 
 /* ── DOM REFS ────────────────── */
 const $ = id => document.getElementById(id);
@@ -121,6 +121,7 @@ const E = {
   mtTitle: $('mtTitle'), mtPrevBtn: $('mtPrevBtn'), mtNextBtn: $('mtNextBtn'),
   mtCloseBtn: $('mtCloseBtn'), mtInfo: $('mtInfo'),
   mtLoading: $('mtLoading'), mtWrap: $('mtWrap'), mtKoreksiNotes: $('mtKoreksiNotes'),
+  mtTabTable: $('mtTabTable'), mtTabStats: $('mtTabStats'), mtStats: $('mtStats'),
   mtExportPdfBtn: $('mtExportPdfBtn'), mtExportExcelBtn: $('mtExportExcelBtn'),
   mtPrintTitle: $('mtPrintTitle'),
   confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmMessage: $('confirmMessage'),
@@ -593,7 +594,7 @@ function openMonthlyTable() {
   const now = nowS();
   MT.year  = Math.min(MT_YEAR_MAX, Math.max(MT_YEAR_MIN, now.getFullYear()));
   MT.month = now.getMonth() + 1;
-  MT.lastData = null;
+  MT.lastData = null; MT.tab = 'table'; MT.cache = {};
   buildMonthlySelects();
   E.mtMonthSel.value = String(MT.month);
   E.mtYearSel.value  = String(MT.year);
@@ -645,6 +646,9 @@ function fetchMonthlyTable() {
   E.mtWrap.classList.add('hidden');
   E.mtInfo.classList.add('hidden');
   E.mtKoreksiNotes.classList.add('hidden');
+  E.mtStats.classList.add('hidden');
+  MT.lastData = null;
+  applyMtTabHeader();
 
   google.script.run
     .withSuccessHandler(res => {
@@ -768,6 +772,7 @@ function renderMonthlyTable(data) {
 
   /* Catatan Koreksi Stok (stock opname) — terbaru di atas */
   renderKoreksiNotes(koreksiList || []);
+  applyMtTab();   /* tab Statistik aktif → tampilkan statistik, sembunyikan tabel */
 }
 
 function renderKoreksiNotes(koreksiList) {
@@ -793,6 +798,238 @@ function renderKoreksiNotes(koreksiList) {
   E.mtKoreksiNotes.innerHTML = h;
   E.mtKoreksiNotes.classList.remove('hidden');
 }
+
+/* ═══ STATISTIK BULANAN (tab "Statistik") — dihitung di klien dari data tabel bulan yang sama ═══ */
+function applyMtTabHeader() {
+  const stats = MT.tab === 'stats';
+  E.mtTabTable.classList.toggle('active', !stats); E.mtTabStats.classList.toggle('active', stats);
+  E.mtTabTable.setAttribute('aria-selected', String(!stats)); E.mtTabStats.setAttribute('aria-selected', String(stats));
+}
+function applyMtTab() {
+  applyMtTabHeader();
+  const stats = MT.tab === 'stats', has = !!MT.lastData && !MT.loading;
+  E.mtWrap.classList.toggle('hidden', stats || !has);
+  E.mtInfo.classList.toggle('hidden', stats || !has);
+  E.mtStats.classList.toggle('hidden', !stats || !has);
+  if (!has) return;
+  if (stats) { E.mtKoreksiNotes.classList.add('hidden'); renderStats(); loadStatsHistory(); }
+  else renderKoreksiNotes(MT.lastData.koreksiList || []);
+}
+
+const LV_SOLID = { safe:'#006e2d', low:'#7c5e00', alert:'#b04a00', danger:'#ba1a1a', empty:'#5b5c66', minus:'#4a148c' };
+const LV_BAND  = { safe:'#c4f2cd', low:'#fff1a6', alert:'#ffd8b0', danger:'#ffdad6', empty:'#dcdce2', minus:'#dcc6f2' };
+
+function fmtN(x, d) {
+  if (!isFinite(x)) return '—';
+  return Number.isInteger(x) ? String(x) : x.toLocaleString('id-ID', { maximumFractionDigits: d === undefined ? 1 : d });
+}
+function niceMax(v) {
+  if (v <= 5) return 5;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (v <= m * p) return m * p;
+  return 10 * p;
+}
+function daysElapsed(year, month, n, now) {
+  const cy = now.getFullYear(), cm = now.getMonth() + 1;
+  if (year > cy || (year === cy && month > cm)) return 0;
+  if (year === cy && month === cm) return Math.min(n, now.getDate());
+  return n;
+}
+/* Fungsi murni: angka statistik satu bulan. `el` = jumlah hari berjalan (bulan berjalan: sampai hari ini; lampau: semua hari). */
+function computeMonthStats(data, now) {
+  const rows = data.rows || [], n = rows.length, el = daysElapsed(data.year, data.month, n, now), rs = rows.slice(0, el);
+  const keluar = data.totals.keluar, masuk = data.totals.masuk;
+  let busiest = null, low = null;
+  rs.forEach(r => {
+    if (r.keluar > 0 && (!busiest || r.keluar > busiest.keluar)) busiest = r;
+    if (!low || r.sisa < low.sisa) low = r;
+  });
+  const last = el ? rs[el - 1].sisa : data.openingStock;
+  const ma = rs.map((_, i) => { const w = rs.slice(Math.max(0, i - 6), i + 1); return w.reduce((s, r) => s + r.keluar, 0) / w.length; });
+  const wd = [0,0,0,0,0,0,0], wc = [0,0,0,0,0,0,0];
+  rs.forEach(r => { const p = r.date.split('-').map(Number); const dow = new Date(p[0], p[1]-1, p[2]).getDay(); wd[dow] += r.keluar; wc[dow]++; });
+  const last7 = rs.slice(-7);
+  return {
+    n, el, keluar, masuk, opening: data.openingStock, last, net: last - data.openingStock,
+    avg: el ? keluar / el : 0, busiest, low,
+    zeroDays: rs.filter(r => r.keluar === 0).length,
+    ma, avg7: last7.length ? last7.reduce((s, r) => s + r.keluar, 0) / last7.length : 0,
+    weekday: [1,2,3,4,5,6,0].map(dow => ({ dow, label: HARI_SHORT_ID[dow], avg: wc[dow] ? wd[dow] / wc[dow] : 0, n: wc[dow] })),
+    users: Object.keys(data.totals.users || {}).map(k => ({ kode: k, qty: data.totals.users[k] || 0 })).sort((a, b) => b.qty - a.qty),
+    koreksi: data.totals.koreksi || 0, koreksiCount: (data.koreksiList || []).length,
+  };
+}
+function prevMonths(y, m, count) {
+  const out = [];
+  for (let i = 1; i <= count; i++) { let mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } if (yy < MT_YEAR_MIN) break; out.push([yy, mm]); }
+  return out;
+}
+const mkey = (y, m) => `${y}-${m}`;
+
+/* Muat 5 bulan sebelumnya (berurutan, hasilnya di-cache 10 menit) untuk perbandingan & tren 6 bulan. */
+function loadStatsHistory() {
+  const seq = ++MT.histSeq; MT.histErr = false;
+  const list = prevMonths(MT.year, MT.month, 5);
+  const step = i => {
+    if (i >= list.length || seq !== MT.histSeq) return;
+    const y = list[i][0], m = list[i][1], hit = MT.cache[mkey(y, m)];
+    if (hit && Date.now() - hit.t < 600000) { step(i + 1); return; }
+    google.script.run
+      .withSuccessHandler(res => {
+        if (seq !== MT.histSeq) return;
+        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
+        if (!res || !res.ok) { MT.histErr = true; renderStats(); return; }
+        MT.cache[mkey(y, m)] = { t: Date.now(), keluar: res.totals.keluar, masuk: res.totals.masuk, days: res.rows.length, monthName: res.monthName };
+        renderStats(); step(i + 1);
+      })
+      .withFailureHandler(() => { if (seq === MT.histSeq) { MT.histErr = true; renderStats(); } })
+      .getMonthlyTable(S.token, y, m);
+  };
+  step(0);
+}
+
+function svgAxis(W, H, ml, mr, mt, mb, maxV, n, stepX, labelEvery) {
+  let s = '';
+  [0, .5, 1].forEach(f => {
+    const y = mt + (H - mt - mb) * (1 - f);
+    s += `<line x1="${ml}" x2="${W - mr}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="st-grid"/>` +
+         `<text x="${ml - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" class="st-tick">${fmtN(maxV * f)}</text>`;
+  });
+  for (let i = 0; i < n; i++) if (i === 0 || (i + 1) % labelEvery === 0)
+    s += `<text x="${(ml + stepX * i + stepX / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="st-tick">${i + 1}</text>`;
+  return s;
+}
+function chartDaily(data, st) {
+  const W = 340, H = 190, ml = 28, mr = 6, mt = 10, mb = 22, n = data.rows.length, pw = W - ml - mr, sx = pw / n, ph = H - mt - mb;
+  const maxV = niceMax(Math.max(1, ...data.rows.slice(0, st.el).map(r => Math.max(r.keluar, r.masuk)), ...st.ma));
+  const Y = v => mt + ph * (1 - v / maxV);
+  let s = svgAxis(W, H, ml, mr, mt, mb, maxV, n, sx, 5);
+  data.rows.forEach((r, i) => {
+    if (i >= st.el) return;
+    const x = ml + sx * i, bw = Math.max(1.6, sx * .38);
+    if (r.keluar > 0) s += `<rect class="bar-k" x="${(x + sx * .08).toFixed(1)}" y="${Y(r.keluar).toFixed(1)}" width="${bw.toFixed(1)}" height="${(ph * r.keluar / maxV).toFixed(1)}" rx="1"><title>${r.hari} ${r.tgl}: ambil ${r.keluar}</title></rect>`;
+    if (r.masuk > 0)  s += `<rect class="bar-m" x="${(x + sx * .08 + bw + .6).toFixed(1)}" y="${Y(r.masuk).toFixed(1)}" width="${bw.toFixed(1)}" height="${(ph * r.masuk / maxV).toFixed(1)}" rx="1"><title>${r.hari} ${r.tgl}: datang ${r.masuk}</title></rect>`;
+  });
+  if (st.ma.length > 1) s += `<polyline class="st-ma" fill="none" points="${st.ma.map((v, i) => `${(ml + sx * i + sx / 2).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}"/>`;
+  return { svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafik harian: total ambil ${st.keluar}, total datang ${st.masuk}">${s}</svg>`,
+           legend: '<span class="lg k">Ambil</span><span class="lg m">Datang</span><span class="lg ma">Rata-rata 7 hari</span>' };
+}
+function chartStock(data, st) {
+  const W = 340, H = 190, ml = 28, mr = 6, mt = 10, mb = 22, n = data.rows.length, pw = W - ml - mr, sx = pw / n, ph = H - mt - mb;
+  const vals = data.rows.slice(0, st.el).map(r => r.sisa).concat([data.openingStock]);
+  const hi = niceMax(Math.max(30, ...vals)), lo = Math.min(0, ...vals);
+  const Y = v => mt + ph * (1 - (v - lo) / (hi - lo));
+  let s = '';
+  [['safe', 24, hi], ['low', 16, 24], ['alert', 8, 16], ['danger', 1, 8], ['empty', 0, 1], ['minus', lo, 0]].forEach(b => {
+    const top = Math.min(b[2], hi), bot = Math.max(b[1], lo);
+    if (top > bot) s += `<rect x="${ml}" y="${Y(top).toFixed(1)}" width="${pw}" height="${(Y(bot) - Y(top)).toFixed(1)}" fill="${LV_BAND[b[0]]}"/>`;
+  });
+  [lo < 0 ? lo : null, 0, 8, 16, 24, hi].filter((v, i, a) => v !== null && a.indexOf(v) === i && v <= hi).forEach(v =>
+    s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="st-grid"/><text x="${ml - 4}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end" class="st-tick">${fmtN(v)}</text>`);
+  for (let i = 0; i < n; i++) if (i === 0 || (i + 1) % 5 === 0) s += `<text x="${(ml + sx * i + sx / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="st-tick">${i + 1}</text>`;
+  const pts = data.rows.slice(0, st.el).map((r, i) => [ml + sx * i + sx / 2, Y(r.sisa), r]);
+  if (pts.length > 1) s += `<polyline class="st-line" fill="none" points="${pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}"/>`;
+  pts.forEach(p => s += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="${LV_SOLID[stockLevel(p[2].sisa)]}"><title>${p[2].hari} ${p[2].tgl}: sisa ${p[2].sisa}</title></circle>`);
+  return { svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafik sisa stok harian; terendah ${st.low ? st.low.sisa : '-'}, akhir ${st.last}">${s}</svg>`,
+           legend: ['safe','low','alert','danger','empty','minus'].map(k => `<span class="lg lv" style="--c:${LV_SOLID[k]}">${STOCK_LEVELS[k].label.charAt(0) + STOCK_LEVELS[k].label.slice(1).toLowerCase()}</span>`).join('') };
+}
+function chartUsers(st) {
+  const tot = st.users.reduce((s, u) => s + u.qty, 0);
+  if (!tot) return '<div class="st-empty">Belum ada pengambilan bulan ini.</div>';
+  const rowH = 26, W = 340, H = st.users.length * rowH + 4, ml = 46, maxQ = st.users[0].qty;
+  let s = '';
+  st.users.forEach((u, i) => {
+    const y = 2 + i * rowH, w = Math.max(2, (W - ml - 78) * u.qty / maxQ);
+    s += `<text x="${ml - 6}" y="${y + 15}" text-anchor="end" class="st-tick b">${esc(u.kode)}</text>` +
+         `<rect class="bar-k" x="${ml}" y="${y + 3}" width="${w.toFixed(1)}" height="16" rx="4"><title>${esc(u.kode)}: ${u.qty}</title></rect>` +
+         `<text x="${(ml + w + 6).toFixed(1)}" y="${y + 15}" class="st-tick b">${u.qty} · ${Math.round(u.qty * 100 / tot)}%</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pengambilan per petugas">${s}</svg>`;
+}
+function chartWeekday(st) {
+  const W = 340, H = 150, ml = 8, mr = 8, mt = 18, mb = 22, pw = W - ml - mr, sx = pw / 7, ph = H - mt - mb;
+  const maxA = Math.max(...st.weekday.map(d => d.avg));
+  if (!maxA) return '<div class="st-empty">Belum ada pengambilan bulan ini.</div>';
+  let s = '';
+  st.weekday.forEach((d, i) => {
+    const h = ph * d.avg / maxA, x = ml + sx * i + sx * .18, w = sx * .64, top = d.avg === maxA;
+    s += `<rect class="${top ? 'bar-p' : 'bar-pl'}" x="${x.toFixed(1)}" y="${(mt + ph - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="4"><title>${d.label}: rata-rata ${fmtN(d.avg)} (${d.n} hari)</title></rect>` +
+         `<text x="${(x + w / 2).toFixed(1)}" y="${(mt + ph - h - 4).toFixed(1)}" text-anchor="middle" class="st-tick b">${fmtN(d.avg)}</text>` +
+         `<text x="${(x + w / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="st-tick">${d.label}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rata-rata pengambilan per hari dalam seminggu">${s}</svg>`;
+}
+function trendSeries(st) {
+  const cur = { y: MT.year, m: MT.month, keluar: st.keluar, masuk: st.masuk, cur: true };
+  const list = prevMonths(MT.year, MT.month, 5).reverse().map(p => { const c = MT.cache[mkey(p[0], p[1])]; return { y: p[0], m: p[1], keluar: c ? c.keluar : null, masuk: c ? c.masuk : null }; });
+  return list.concat([cur]);
+}
+function chartTrend(st) {
+  const ser = trendSeries(st), W = 340, H = 170, ml = 8, mr = 8, mt = 16, mb = 22, pw = W - ml - mr, g = pw / ser.length, ph = H - mt - mb;
+  const maxV = niceMax(Math.max(1, ...ser.map(x => Math.max(x.keluar || 0, x.masuk || 0))));
+  let s = '';
+  ser.forEach((x, i) => {
+    const gx = ml + g * i + g * .1, bw = g * .38;
+    [['k', x.keluar, 0], ['m', x.masuk, bw + 1]].forEach(b => {
+      if (b[1] === null) { s += `<rect class="bar-na" x="${(gx + b[2]).toFixed(1)}" y="${(mt + ph - 4).toFixed(1)}" width="${bw.toFixed(1)}" height="4" rx="2"/>`; return; }
+      const h = ph * b[1] / maxV;
+      s += `<rect class="bar-${b[0]}" x="${(gx + b[2]).toFixed(1)}" y="${(mt + ph - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2"><title>${BULAN_SHORT_ID[x.m]} ${x.y}: ${b[0] === 'k' ? 'ambil' : 'datang'} ${b[1]}</title></rect>` +
+           `<text x="${(gx + b[2] + bw / 2).toFixed(1)}" y="${(mt + ph - h - 3).toFixed(1)}" text-anchor="middle" class="st-tick s">${b[1]}</text>`;
+    });
+    s += `<text x="${(ml + g * i + g / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="st-tick${x.cur ? ' b' : ''}">${BULAN_SHORT_ID[x.m]}${x.cur ? '*' : ''}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Tren ambil dan datang 6 bulan terakhir">${s}</svg>`;
+}
+
+function deltaTag(cur, prev) {
+  if (prev === null || prev === undefined || !isFinite(prev)) return '';
+  if (prev === 0) return cur === 0 ? '<span class="st-delta flat">sama</span>' : '<span class="st-delta up">baru</span>';
+  const p = Math.round((cur - prev) * 100 / prev);
+  return p === 0 ? '<span class="st-delta flat">≈ sama</span>' : `<span class="st-delta ${p > 0 ? 'up' : 'down'}">${p > 0 ? '▲' : '▼'} ${Math.abs(p)}%</span>`;
+}
+function tglLabel(r) { return r ? `${r.hari}, ${r.tgl}` : '—'; }
+
+function renderStats() {
+  const data = MT.lastData; if (!data || MT.tab !== 'stats') return;
+  const now = nowS(), st = computeMonthStats(data, now), pm = prevMonths(data.year, data.month, 1)[0], prev = pm ? MT.cache[mkey(pm[0], pm[1])] : null;
+  const prevAvg = prev && prev.days ? prev.keluar / prev.days : null;
+  const isCur = now.getFullYear() === data.year && now.getMonth() + 1 === data.month;
+  let h = '';
+  if (isCur) {   /* perkiraan: stok sekarang ÷ rata-rata ambil 7 hari terakhir */
+    const lv = STOCK_LEVELS[stockLevel(S.stock)];
+    let big, sub;
+    if (S.stock <= 0) { big = 'Stok habis'; sub = 'Catat kedatangan atau lakukan koreksi stok.'; }
+    else if (st.avg7 <= 0) { big = '—'; sub = `Stok ${S.stock} galon · belum ada pengambilan dalam 7 hari terakhir.`; }
+    else {
+      const days = Math.floor(S.stock / st.avg7), when = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+      big = `≈ ${days} hari`; sub = `Stok ${S.stock} galon · rata-rata ambil ${fmtN(st.avg7)}/hari (7 hari terakhir) · sekitar ${formatTanggalPendek(toISODate(when))}`;
+    }
+    h += `<div class="st-runway ${lv.key}">${ic('hourglass_bottom','ms-28')}<div><div class="st-lbl">Perkiraan stok cukup</div><div class="st-big">${esc(big)}</div><div class="st-sub">${esc(sub)}</div></div></div>`;
+  }
+  const lowLv = st.low ? stockLevel(st.low.sisa) : 'safe';
+  const netIc = st.net > 0 ? 'trending_up' : st.net < 0 ? 'trending_down' : 'trending_flat';
+  h += '<div class="st-grid-cards">' +
+    `<div class="st-card"><div class="st-lbl">${ic('logout','ms-18')}Total Ambil</div><div class="st-val minus">${st.keluar}</div><div class="st-sub">${prev ? 'Bulan lalu: ' + prev.keluar : '&nbsp;'}</div></div>` +
+    `<div class="st-card"><div class="st-lbl">${ic('login','ms-18')}Total Datang</div><div class="st-val plus">${st.masuk}</div><div class="st-sub">${prev ? 'Bulan lalu: ' + prev.masuk : '&nbsp;'}</div></div>` +
+    `<div class="st-card"><div class="st-lbl">${ic('speed','ms-18')}Rata-rata Ambil/hari</div><div class="st-val">${fmtN(st.avg)}</div><div class="st-sub">${st.el} hari berjalan ${prevAvg !== null ? deltaTag(st.avg, prevAvg) : ''}</div></div>` +
+    `<div class="st-card"><div class="st-lbl">${ic('bolt','ms-18')}Ambil Tersibuk</div><div class="st-val minus">${st.busiest ? st.busiest.keluar : '—'}</div><div class="st-sub">${esc(tglLabel(st.busiest))}</div></div>` +
+    `<div class="st-card"><div class="st-lbl">${ic('trending_down','ms-18')}Stok Terendah</div><div class="st-val" style="color:${LV_SOLID[lowLv]}">${st.low ? st.low.sisa : '—'}</div><div class="st-sub">${esc(tglLabel(st.low))}</div></div>` +
+    `<div class="st-card"><div class="st-lbl">${ic(netIc,'ms-18')}Selisih Stok</div><div class="st-val ${st.net > 0 ? 'plus' : st.net < 0 ? 'minus' : ''}">${st.net > 0 ? '+' : ''}${st.net}</div><div class="st-sub">${st.opening} → ${st.last}</div></div>` +
+    `<div class="st-card"><div class="st-lbl">${ic('event_available','ms-18')}Hari Tanpa Ambil</div><div class="st-val">${st.zeroDays}</div><div class="st-sub">dari ${st.el} hari berjalan</div></div>` +
+    `<div class="st-card"><div class="st-lbl">${ic('tune','ms-18')}Koreksi Stok</div><div class="st-val ${st.koreksi > 0 ? 'plus' : st.koreksi < 0 ? 'minus' : ''}">${st.koreksi > 0 ? '+' : ''}${st.koreksi}</div><div class="st-sub">${st.koreksiCount} kali koreksi</div></div>` +
+    '</div>';
+  const d = chartDaily(data, st), sk = chartStock(data, st);
+  const hist = trendSeries(st).filter(x => !x.cur && x.keluar === null).length;
+  h += `<figure class="st-chart"><figcaption>Ambil &amp; Datang per Hari</figcaption>${d.svg}<div class="st-legend">${d.legend}</div></figure>`;
+  h += `<figure class="st-chart"><figcaption>Sisa Stok Harian</figcaption>${sk.svg}<div class="st-legend">${sk.legend}</div></figure>`;
+  h += `<figure class="st-chart"><figcaption>Ambil per Petugas</figcaption>${chartUsers(st)}</figure>`;
+  h += `<figure class="st-chart"><figcaption>Pola Ambil per Hari dalam Seminggu <small>(rata-rata)</small></figcaption>${chartWeekday(st)}</figure>`;
+  h += `<figure class="st-chart"><figcaption>Tren 6 Bulan</figcaption>${chartTrend(st)}<div class="st-legend"><span class="lg k">Ambil</span><span class="lg m">Datang</span></div>` +
+       `<div class="st-note">${MT.histErr ? 'Sebagian bulan gagal dimuat. Buka ulang tab ini untuk mencoba lagi.' : hist ? 'Memuat bulan sebelumnya…' : '* bulan yang sedang dilihat'}</div></figure>`;
+  h += '<div class="st-note foot">Statistik dihitung dari tabel bulan ini. "Per hari" memakai hari yang sudah berjalan; perkiraan stok bersifat kasar.</div>';
+  E.mtStats.innerHTML = h;
+}
+
 
 /* ── EXPORT: CSV (dibuka sebagai Excel) ──────────────────────── */
 function exportMonthlyCsv() {
@@ -1275,8 +1512,7 @@ function renderAnnouncements() {
   const dur = Math.max(14, Math.round((text.length + 14) * 0.16));   /* kecepatan baca tetap: lebih panjang = lebih lama */
   A.list.innerHTML =
     `<div class="ann-strip warn" role="marquee" title="${esc(text)}">` +
-      ic('campaign', 'ann-lead') +
-      `<div class="ann-marquee"><div class="ann-marquee-content" style="animation-duration:${dur}s"><span class="ann-seg"><b>Pengumuman:</b> ${esc(text)}</span></div></div>` +
+      `<div class="ann-marquee"><div class="ann-marquee-content" style="animation-duration:${dur}s"><span class="ann-seg">${esc(text)}</span></div></div>` +
     `</div>`;
   A.list.classList.remove('hidden');
 }
@@ -1414,6 +1650,8 @@ function bindEvents() {
   E.mtExportPdfBtn.addEventListener('click', exportMonthlyPdf);
   E.mtExportExcelBtn.addEventListener('click', exportMonthlyCsv);
   E.monthlyModal.addEventListener('click', ev=>{ if(ev.target===E.monthlyModal) closeMonthlyTable(); });
+  E.mtTabTable.addEventListener('click', ()=>{ MT.tab = 'table'; setActivity(); applyMtTab(); });
+  E.mtTabStats.addEventListener('click', ()=>{ MT.tab = 'stats'; setActivity(); applyMtTab(); });
   E.mtPrevBtn.addEventListener('click', ()=> stepReportMonth(-1));
   E.mtNextBtn.addEventListener('click', ()=> stepReportMonth(1));
 

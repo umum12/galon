@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&amp;family=Rajdhani:wght@600;700&amp;display=swap">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&amp;icon_names=add,admin_panel_settings,arrow_downward,arrow_upward,auto_awesome,bar_chart,block,build,calendar_today,campaign,chat,check_circle,chevron_left,chevron_right,close,crisis_alert,delete,edit,edit_note,error,history,history_toggle_off,image,info,inventory_2,key,lock,login,logout,more_horiz,person,photo_camera,picture_as_pdf,receipt_long,refresh,remove,remove_circle,restart_alt,schedule,send,settings,table_view,trending_down,tune,verified_user,warning&amp;display=block">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&amp;icon_names=add,admin_panel_settings,arrow_downward,arrow_upward,auto_awesome,bar_chart,block,bolt,build,calendar_today,campaign,chat,check_circle,chevron_left,chevron_right,close,crisis_alert,delete,edit,edit_note,error,event_available,history,history_toggle_off,hourglass_bottom,image,info,insights,inventory_2,key,lock,login,logout,more_horiz,person,photo_camera,picture_as_pdf,receipt_long,refresh,remove,remove_circle,restart_alt,schedule,send,settings,speed,table_view,trending_down,trending_flat,trending_up,tune,verified_user,warning&amp;display=block">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -344,11 +344,16 @@
         </div>
         <button class="mt-close" id="mtCloseBtn" aria-label="Tutup"><span class="ms" aria-hidden="true">close</span></button>
       </div>
+      <div class="mt-tabs" id="mtTabs" role="tablist" aria-label="Tampilan laporan">
+        <button type="button" role="tab" class="mt-tab active" id="mtTabTable" aria-selected="true"><span class="ms ms-20" aria-hidden="true">table_view</span>Tabel</button>
+        <button type="button" role="tab" class="mt-tab" id="mtTabStats" aria-selected="false"><span class="ms ms-20" aria-hidden="true">insights</span>Statistik</button>
+      </div>
       <div class="mt-print-title" id="mtPrintTitle"></div>
       <div class="mt-info hidden" id="mtInfo"></div>
       <div class="mt-loading" id="mtLoading"><div class="lp lp-indeterminate"><span class="lp-bar"></span></div><span>Memuat data…</span></div>
       <div class="mt-wrap hidden" id="mtWrap"></div>
       <div class="mt-koreksi-notes hidden" id="mtKoreksiNotes"></div>
+      <div class="mt-stats hidden" id="mtStats"></div>
     </div>
 
   </div>
