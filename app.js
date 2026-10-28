@@ -31,6 +31,40 @@ const S = {
   txCustom: false,            /* true = user memilih tanggal/jam sendiri */
 };
 
+/* Kunci perangkat tepercaya (TIDAK dihapus saat logout) dan selisih jam perangkat↔server.
+   Semua logika tanggal ("hari ini", batas mundur) memakai nowS() = waktu menurut zona server, bukan zona perangkat. */
+S.deviceKey = (function () { try { return localStorage.getItem('galon_dev') || ''; } catch (_) { return ''; } })();
+S.skewMs = 0;
+function nowS() { return new Date(Date.now() + (S.skewMs || 0)); }
+function setServerSkew(str) {   /* 'yyyy-MM-dd HH:mm:ss' (zona skrip) → selisih terhadap jam perangkat, dibulatkan ke menit */
+  const m = String(str || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return;
+  const wall = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime();
+  S.skewMs = Math.round((wall - Date.now()) / 60000) * 60000;
+}
+/* Draf formulir: bila sesi habis mendadak, jumlah + catatan dipulihkan setelah login ulang (≤15 menit, pengguna sama). Foto tidak disimpan. */
+const DRAFT_KEY = 'galon_draft', DRAFT_TTL_MS = 15 * 60 * 1000;
+function saveDraft() {
+  try {
+    const note = E.noteInput.value.trim();
+    if (!S.user || S.user.role === 'demo' || (S.qty < 1 && !note)) return;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ kode: S.user.kode, mode: S.mode, qty: S.qty, note, t: Date.now() }));
+  } catch (_) {}
+}
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY); if (!raw) return;
+    localStorage.removeItem(DRAFT_KEY);
+    const d = JSON.parse(raw);
+    if (!d || !S.user || S.user.role === 'demo' || d.kode !== S.user.kode || Date.now() - d.t > DRAFT_TTL_MS) return;
+    setMode(d.mode === 'DATANG' ? 'DATANG' : 'AMBIL');
+    S.qty = Math.max(0, Math.min(999, parseInt(d.qty, 10) || 0)); E.qtyInput.value = S.qty;
+    E.noteInput.value = String(d.note || '').substring(0, 200);
+    updateSubmitText();
+    toast(d.mode === 'DATANG' ? 'Draf dipulihkan. Foto invoice perlu diambil ulang.' : 'Draf dipulihkan. Periksa lalu kirim.', 'ok', 4500);
+  } catch (_) {}
+}
+
 /* Monthly table state */
 const MT = { year: 0, month: 0, loading: false, lastData: null, seq: 0 };
 
@@ -197,7 +231,7 @@ function formatTanggalID(raw) {
 
 /* ── CACHE ───────────────────── */
 function saveCache() {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ token:S.token, user:S.user, expiresAt:S.expiresAt, lastActivity:S.lastActivity, stock:S.stock, warning:S.warning, danger:S.danger, appName:S.appName, status:S.status, recent:S.recent, month:S.month, monthLabel:S.monthLabel, ann:S.ann, lastSync:S.lastSync })); } catch(_) {}
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ token:S.token, user:S.user, expiresAt:S.expiresAt, lastActivity:S.lastActivity, stock:S.stock, warning:S.warning, danger:S.danger, appName:S.appName, status:S.status, recent:S.recent, month:S.month, monthLabel:S.monthLabel, ann:S.ann, lastSync:S.lastSync, skewMs:S.skewMs })); } catch(_) {}
 }
 function loadCache()  { try { const r=localStorage.getItem(CACHE_KEY); return r?JSON.parse(r):null; } catch(_){return null;} }
 function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch(_){} }
@@ -229,7 +263,7 @@ function toast(msg, type='', ms) {
 /* ── CLOCK ───────────────────── */
 let _lastDay = '';
 function updateClock() {
-  const now  = new Date();
+  const now = nowS();
   const dayKey = toISODate(now);
   if (_lastDay && dayKey !== _lastDay && S.token) renderRecent();   /* lewat tengah malam: Hari Ini/Kemarin bergeser */
   _lastDay = dayKey;
@@ -381,7 +415,7 @@ function renderTxList(container, items, mine) {
    Yang lebih lama ada di Riwayat Lengkap. Server mengirim RECENT_SERVER_LIMIT transaksi terbaru. */
 const RECENT_SERVER_LIMIT = 30;   /* sama dengan TX_RECENT_LIMIT di Code.gs */
 function renderRecent() {
-  const now = new Date();
+  const now = nowS();
   const today = toISODate(now), yest = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
   const all = S.recent || [];
   const groups = [
@@ -467,14 +501,14 @@ function doDeleteTransaction() {
       E.confirmDeleteBtn.disabled=false; E.confirmDeleteBtn.innerHTML=ic('delete','ms-20')+'Hapus Transaksi';
       closeDeleteModal(); toast((err&&err.message)||'Gagal menghapus.','err');
     })
-    .deleteTransaction(S.token, tx.timestamp, tx.kode);
+    .deleteTransaction(S.token, tx.timestamp, tx.kode, tx.id || '');
 }
 
 /* ── EDIT MODAL ──────────────── */
 function openEditModal(tx) {
   S.pendingEdit = tx;
   const isAmbil = tx.jenis==='AMBIL';
-  const now = new Date();
+  const now = nowS();
   const minAllowed = toISODate(new Date(now.getTime() - MAX_BACKDATE_DAYS*86400000));
   E.editNama.textContent = tx.nama||tx.kode;
   E.editMeta.innerHTML = `<span class="tx-pill ${isAmbil?'ambil':'datang'}" style="font-size:10px;">${esc(tx.jenis)}</span> ${isAmbil?'Ambil galon':'Galon datang'} &nbsp;·&nbsp; jenis tidak bisa diubah`;
@@ -508,7 +542,7 @@ function stepEditQty(d) {
   updateEditPreview(); setActivity();
 }
 function checkWhenRange(date, time) {
-  const now = new Date();
+  const now = nowS();
   if (date > toISODate(now)) return 'Tanggal tidak boleh di masa depan.';
   if (date < toISODate(new Date(now.getTime() - MAX_BACKDATE_DAYS*86400000))) return `Maksimal mundur ${MAX_BACKDATE_DAYS} hari.`;
   if (date === toISODate(now) && time > toHHMM(now)) return 'Jam tidak boleh di masa depan.';
@@ -541,7 +575,7 @@ function doEditTransaction() {
       if (isHistoryOpen()) fetchFullHistory(true);
     })
     .withFailureHandler(err => { reset(); toast((err&&err.message)||'Gagal menyimpan.','err'); })
-    .editTransaction({ token:S.token, timestamp:tx.timestamp, kode:tx.kode, qty, note, txDate:date, txTime:time });
+    .editTransaction({ token:S.token, id:tx.id || '', timestamp:tx.timestamp, kode:tx.kode, qty, note, txDate:date, txTime:time });
 }
 
 /* ███ 3. LAPORAN BULANAN: tabel, ekspor CSV/PDF ███ */
@@ -556,7 +590,7 @@ function buildMonthlySelects() {
 }
 
 function openMonthlyTable() {
-  const now = new Date();
+  const now = nowS();
   MT.year  = Math.min(MT_YEAR_MAX, Math.max(MT_YEAR_MIN, now.getFullYear()));
   MT.month = now.getMonth() + 1;
   MT.lastData = null;
@@ -802,21 +836,30 @@ function exportMonthlyCsv() {
 
   const csvContent = '\uFEFF' + lines.join('\r\n'); /* BOM → teks Indonesia aman di Excel */
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url;
-  a.download = `Galon_${monthName}_${year}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast('CSV berhasil diunduh.', 'ok');
+  saveBlobFile(blob, `Galon_${monthName}_${year}.csv`).then(r => {
+    if (r !== 'cancel') toast(r === 'share' ? 'CSV siap disimpan/dibagikan.' : 'CSV berhasil diunduh.', 'ok');
+  });
+}
+/* Simpan berkas: iOS (aplikasi terpasang) sering memblokir unduhan blob → pakai lembar Bagikan; selain itu unduhan biasa. */
+async function saveBlobFile(blob, filename) {
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  try {
+    const file = new File([blob], filename, { type: blob.type });
+    if (ios && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: filename }); return 'share'; }
+  } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return 'download';
 }
 
 /* ── EXPORT: PDF (via dialog print bawaan browser) ───────────── */
 function exportMonthlyPdf() {
   if (!MT.lastData) { toast('Data belum siap.', 'err'); return; }
   document.body.classList.add('mt-printing');
+  toast('Di dialog cetak, pilih "Simpan sebagai PDF".', '', 5000);
   window.print();
 }
 window.addEventListener('afterprint', () => document.body.classList.remove('mt-printing'));
@@ -994,7 +1037,7 @@ function renderPhotoThumb() {
 
 /* ── WAKTU TRANSAKSI ─────────── */
 function openTxWhenEdit() {
-  const now = new Date();
+  const now = nowS();
   E.txDateInput.min   = toISODate(new Date(now.getTime() - MAX_BACKDATE_DAYS*86400000));
   E.txDateInput.max   = toISODate(now);
   E.txDateInput.value = toISODate(now);
@@ -1015,7 +1058,7 @@ function readTxWhen() {
   if (!S.txCustom) return { custom:false };
   const date = E.txDateInput.value, time = E.txTimeInput.value;
   if (!date || !time) return { error:'Tanggal dan jam harus diisi.' };
-  const now = new Date();
+  const now = nowS();
   if (date > toISODate(now)) return { error:'Tanggal tidak boleh di masa depan.' };
   if (date < toISODate(new Date(now.getTime() - MAX_BACKDATE_DAYS*86400000))) return { error:`Maksimal mundur ${MAX_BACKDATE_DAYS} hari.` };
   if (date === toISODate(now) && time > toHHMM(now)) return { error:'Jam tidak boleh di masa depan.' };
@@ -1025,6 +1068,7 @@ function readTxWhen() {
 /* ── APPLY DATA ──────────────── */
 function applyData(res) {
   const prev=S.stock;
+  if(res.serverTime!==undefined) setServerSkew(res.serverTime);
   if(res.stock!==undefined)  S.stock  =Number(res.stock);
   if(res.warning!==undefined)S.warning=Number(res.warning);
   if(res.danger!==undefined) S.danger =Number(res.danger);
@@ -1052,17 +1096,20 @@ function doLogin() {
       E.loginBtn.disabled=false;
       if(!res||!res.ok){Splash.cancel();setLoginError((res&&res.message)||'Login gagal.');return;}
       S.token=res.token; S.user=res.user; S.expiresAt=res.expiresAt; S.lastActivity=Date.now(); saveCache();
+      if (res.deviceKey) { S.deviceKey = res.deviceKey; try { localStorage.setItem('galon_dev', res.deviceKey); } catch (_) {} }
       showView('main'); setMode('AMBIL');
       if (res.stock !== undefined) applyData(res); else loadDashboard(false);   /* login sudah membawa data dashboard */
       startIdleWatcher();
       Splash.finish();   /* bilah penuh lalu splash memudar, menu utama sudah siap di belakangnya */
       toast(`Masuk sebagai ${res.user.kode}`,'ok');
+      restoreDraft();
     })
     .withFailureHandler(err=>{ E.loginBtn.disabled=false; Splash.cancel(); setLoginError((err&&err.message)||'Koneksi gagal.'); })
-    .login(code);
+    .login(code, S.deviceKey || '');
 }
 function setLoginError(msg) { E.loginError.textContent=msg; E.loginError.classList.toggle('hidden',!msg); }
 function doLogout(fromIdle=false) {
+  if(fromIdle) saveDraft();   /* sesi habis mendadak: jangan hilangkan isian */
   if(S.token) google.script.run.logout(S.token);
   clearCache();
   Object.assign(S,{token:null,user:null,expiresAt:0,stock:0,recent:[],month:{masuk:0,keluar:0},monthLabel:'—',qty:1,photoDataUrl:'',photoName:'',pendingDelete:null,ann:[],annAdmin:[],annPetugas:[],annSel:[],syncing:false,syncError:false,lastSync:0,flash:''});
@@ -1507,7 +1554,7 @@ function init() {
     lastActivity:cache.lastActivity||Date.now(),
     stock:cache.stock||0, warning:cache.warning||20, danger:cache.danger||10,
     appName:cache.appName||'Galon App', status:cache.status||'safe',
-    recent:cache.recent||[], month:cache.month||{masuk:0,keluar:0}, monthLabel:cache.monthLabel||'—', ann:cache.ann||[], lastSync:cache.lastSync||0,
+    recent:cache.recent||[], month:cache.month||{masuk:0,keluar:0}, monthLabel:cache.monthLabel||'—', ann:cache.ann||[], lastSync:cache.lastSync||0, skewMs:cache.skewMs||0,
   });
   showView('main'); setMode('AMBIL');
   renderStock(false); renderRecent(); renderAnnouncements(); startIdleWatcher();
