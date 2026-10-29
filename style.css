@@ -697,6 +697,10 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .lg.k { --c: #ba1a1a; } .lg.m { --c: #006e2d; } .lg.ma::before { height: 3px; background: #1b1b1f; vertical-align: 3px; } .lg.lv::before { border-radius: 50%; }
 .st-note { font-size: 12px; color: var(--md-on-surface-variant); margin: 8px 4px 0; } .st-note.foot { text-align: center; margin: 0 8px; }
 .st-empty { text-align: center; font-size: 13px; color: var(--md-on-surface-variant); padding: 18px 0; }
+.st-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--md-on-surface-variant); padding: 0 4px; }
+.st-meta b { color: var(--md-on-surface); font-weight: 700; }
+.st-refresh { appearance: none; border: none; flex-shrink: 0; min-height: 36px; padding: 0 14px; border-radius: var(--r-full); background: var(--md-secondary-container); color: var(--md-on-secondary-container); font-size: 13px; font-weight: 700; cursor: pointer; touch-action: manipulation; display: inline-flex; align-items: center; gap: 6px; position: relative; overflow: hidden; }
+.st-refresh:disabled { opacity: .6; }
 @media print { body.mt-printing .mt-tabs { display: none !important; } body.mt-printing .mt-stats { overflow: visible; background: none; } body.mt-printing .st-chart, body.mt-printing .st-card { break-inside: avoid; } }
 
 /* 15b. PREFERENSI GERAK BERKURANG */

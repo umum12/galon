@@ -67,7 +67,7 @@ function restoreDraft() {
 }
 
 /* Monthly table state */
-const MT = { year: 0, month: 0, loading: false, lastData: null, seq: 0, tab: 'table', cache: {}, histSeq: 0, histErr: false };
+const MT = { year: 0, month: 0, loading: false, lastData: null, seq: 0, tab: 'table', stats: null, statSeq: 0, statLoading: false };
 
 /* ── DOM REFS ────────────────── */
 const $ = id => document.getElementById(id);
@@ -594,7 +594,7 @@ function openMonthlyTable() {
   const now = nowS();
   MT.year  = Math.min(MT_YEAR_MAX, Math.max(MT_YEAR_MIN, now.getFullYear()));
   MT.month = now.getMonth() + 1;
-  MT.lastData = null; MT.tab = 'table'; MT.cache = {};
+  MT.lastData = null; MT.stats = null; MT.tab = 'table';
   buildMonthlySelects();
   E.mtMonthSel.value = String(MT.month);
   E.mtYearSel.value  = String(MT.year);
@@ -625,21 +625,28 @@ function stepReportMonth(delta) {
   if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
   if (y < MT_YEAR_MIN || y > MT_YEAR_MAX) return;
   MT.year = y; MT.month = m;
-  fetchMonthlyTable();
+  loadMonthView();
 }
 function renderFromPicker() {
   MT.month = parseInt(E.mtMonthSel.value, 10);
   MT.year  = parseInt(E.mtYearSel.value, 10);
-  fetchMonthlyTable();
+  loadMonthView();
 }
+
+/* Layar laporan: judul bulan + batas panah. Dipakai alur Tabel dan Statistik. */
+function prepareReport() {
+  showReportScreen();
+  E.mtTitle.textContent = `${BULAN_ID[MT.month]} ${MT.year}`;
+  updateMtNavBounds(E.mtPrevBtn, E.mtNextBtn);
+}
+/* Tab Tabel membaca data terkini (getMonthlyTable); tab Statistik membaca snapshot harian (getStatsSnapshot). Hanya tab aktif yang dimuat. */
+function loadMonthView() { if (MT.tab === 'stats') loadStats(); else fetchMonthlyTable(); }
 
 function fetchMonthlyTable() {
   const seq = ++MT.seq;
   MT.loading = true;
 
-  showReportScreen();
-  E.mtTitle.textContent = `${BULAN_ID[MT.month]} ${MT.year}`;
-  updateMtNavBounds(E.mtPrevBtn, E.mtNextBtn);
+  prepareReport();
 
   /* Tampilkan loading, sembunyikan tabel, info & catatan koreksi */
   E.mtLoading.classList.remove('hidden');
@@ -654,7 +661,7 @@ function fetchMonthlyTable() {
     .withSuccessHandler(res => {
       if (seq !== MT.seq) return;   /* jawaban basi */
       MT.loading = false;
-      E.mtLoading.classList.add('hidden');
+      if (!MT.statLoading) E.mtLoading.classList.add('hidden');
       if (!res || !res.ok) {
         if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
         toast((res&&res.message)||'Gagal memuat tabel.','err'); return;
@@ -664,7 +671,7 @@ function fetchMonthlyTable() {
     .withFailureHandler(err => {
       if (seq !== MT.seq) return;
       MT.loading = false;
-      E.mtLoading.classList.add('hidden');
+      if (!MT.statLoading) E.mtLoading.classList.add('hidden');
       toast((err&&err.message)||'Gagal memuat tabel.','err');
     })
     .getMonthlyTable(S.token, MT.year, MT.month);
@@ -772,7 +779,7 @@ function renderMonthlyTable(data) {
 
   /* Catatan Koreksi Stok (stock opname) — terbaru di atas */
   renderKoreksiNotes(koreksiList || []);
-  applyMtTab();   /* tab Statistik aktif → tampilkan statistik, sembunyikan tabel */
+  if (MT.tab === 'table') applyMtTab();   /* tab Statistik aktif: data tabel hanya disimpan, tampilan tak berubah */
 }
 
 function renderKoreksiNotes(koreksiList) {
@@ -805,15 +812,79 @@ function applyMtTabHeader() {
   E.mtTabTable.classList.toggle('active', !stats); E.mtTabStats.classList.toggle('active', stats);
   E.mtTabTable.setAttribute('aria-selected', String(!stats)); E.mtTabStats.setAttribute('aria-selected', String(stats));
 }
+const monthMatches = d => !!d && d.year === MT.year && d.month === MT.month;
+
 function applyMtTab() {
   applyMtTabHeader();
-  const stats = MT.tab === 'stats', has = !!MT.lastData && !MT.loading;
-  E.mtWrap.classList.toggle('hidden', stats || !has);
-  E.mtInfo.classList.toggle('hidden', stats || !has);
-  E.mtStats.classList.toggle('hidden', !stats || !has);
-  if (!has) return;
-  if (stats) { E.mtKoreksiNotes.classList.add('hidden'); renderStats(); loadStatsHistory(); }
-  else renderKoreksiNotes(MT.lastData.koreksiList || []);
+  if (MT.tab === 'stats') {
+    E.mtWrap.classList.add('hidden'); E.mtInfo.classList.add('hidden'); E.mtKoreksiNotes.classList.add('hidden');
+    if (MT.stats && monthMatches(MT.stats.data) && !MT.statLoading) {
+      E.mtLoading.classList.add('hidden'); E.mtStats.classList.remove('hidden'); renderStats();
+    } else loadStats();
+  } else {
+    E.mtStats.classList.add('hidden');
+    if (MT.lastData && monthMatches(MT.lastData) && !MT.loading) {
+      E.mtLoading.classList.add('hidden'); E.mtWrap.classList.remove('hidden'); E.mtInfo.classList.remove('hidden');
+      renderKoreksiNotes(MT.lastData.koreksiList || []);
+    } else fetchMonthlyTable();
+  }
+}
+
+/* Snapshot (kolom ringkas) → bentuk data yang sama dengan tabel, supaya computeMonthStats/grafik dipakai ulang. */
+function snapshotToData(res) {
+  const d = res.data;
+  return {
+    year: d.year, month: d.month, days: d.days, el: d.el, openingStock: d.openingStock, totals: d.totals, koreksiCount: d.koreksiCount,
+    rows: d.rows.map((a, i) => {
+      const day = i + 1, dow = new Date(d.year, d.month - 1, day).getDay();
+      return { hari: HARI_SHORT_ID[dow], tgl: `${pad2(day)}-${BULAN_SHORT_ID[d.month]}-${String(d.year).slice(-2)}`,
+               date: `${d.year}-${pad2(d.month)}-${pad2(day)}`, keluar: a[0], masuk: a[1], koreksi: a[2], sisa: a[3] };
+    }),
+  };
+}
+function setStatsFromResponse(res) {
+  const hist = {};
+  (res.history || []).forEach(h => { hist[`${h.y}-${h.m}`] = { keluar: h.keluar, masuk: h.masuk, days: h.days }; });
+  MT.stats = { data: snapshotToData(res), meta: res.meta || {}, hist };
+}
+
+function loadStats() {
+  const seq = ++MT.statSeq;
+  MT.stats = null; MT.statLoading = true; prepareReport();
+  E.mtLoading.classList.remove('hidden');
+  E.mtWrap.classList.add('hidden'); E.mtInfo.classList.add('hidden'); E.mtKoreksiNotes.classList.add('hidden'); E.mtStats.classList.add('hidden');
+  google.script.run
+    .withSuccessHandler(res => {
+      if (seq !== MT.statSeq) return;   /* jawaban basi */
+      MT.statLoading = false; E.mtLoading.classList.add('hidden');
+      if (!res || !res.ok) {
+        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
+        toast((res && res.message) || 'Gagal memuat statistik.', 'err'); return;
+      }
+      try { setStatsFromResponse(res); } catch (e) { toast('Respons statistik tidak valid.', 'err'); return; }
+      if (MT.tab === 'stats') { E.mtStats.classList.remove('hidden'); renderStats(); }
+    })
+    .withFailureHandler(err => { if (seq !== MT.statSeq) return; MT.statLoading = false; E.mtLoading.classList.add('hidden'); toast((err && err.message) || 'Gagal memuat statistik.', 'err'); })
+    .getStatsSnapshot(S.token, MT.year, MT.month);
+}
+
+/* Admin: paksa pembaruan snapshot sekarang (transaksi/koreksi hari ini baru masuk statistik setelah pembaruan). */
+function doRefreshStats(btn) {
+  if (S.user && S.user.role !== 'admin') return;
+  const seq = ++MT.statSeq;
+  btn.disabled = true; btn.innerHTML = loadingBar() + 'Memperbarui…';
+  google.script.run
+    .withSuccessHandler(res => {
+      if (seq !== MT.statSeq) return;
+      if (!res || !res.ok) {
+        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
+        toast((res && res.message) || 'Gagal memperbarui statistik.', 'err'); renderStats(); return;
+      }
+      try { setStatsFromResponse(res); } catch (e) { toast('Respons statistik tidak valid.', 'err'); renderStats(); return; }
+      renderStats(); toast(res.message || 'Statistik diperbarui.', 'ok'); setActivity();
+    })
+    .withFailureHandler(err => { if (seq !== MT.statSeq) return; toast((err && err.message) || 'Gagal memperbarui statistik.', 'err'); renderStats(); })
+    .refreshStatsNow(S.token, MT.year, MT.month);
 }
 
 const LV_SOLID = { safe:'#006e2d', low:'#7c5e00', alert:'#b04a00', danger:'#ba1a1a', empty:'#5b5c66', minus:'#4a148c' };
@@ -837,7 +908,8 @@ function daysElapsed(year, month, n, now) {
 }
 /* Fungsi murni: angka statistik satu bulan. `el` = jumlah hari berjalan (bulan berjalan: sampai hari ini; lampau: semua hari). */
 function computeMonthStats(data, now) {
-  const rows = data.rows || [], n = rows.length, el = daysElapsed(data.year, data.month, n, now), rs = rows.slice(0, el);
+  const rows = data.rows || [], n = data.days || rows.length;
+  const el = data.el !== undefined ? data.el : daysElapsed(data.year, data.month, n, now), rs = rows.slice(0, el);
   const keluar = data.totals.keluar, masuk = data.totals.masuk;
   let busiest = null, low = null;
   rs.forEach(r => {
@@ -856,7 +928,7 @@ function computeMonthStats(data, now) {
     ma, avg7: last7.length ? last7.reduce((s, r) => s + r.keluar, 0) / last7.length : 0,
     weekday: [1,2,3,4,5,6,0].map(dow => ({ dow, label: HARI_SHORT_ID[dow], avg: wc[dow] ? wd[dow] / wc[dow] : 0, n: wc[dow] })),
     users: Object.keys(data.totals.users || {}).map(k => ({ kode: k, qty: data.totals.users[k] || 0 })).sort((a, b) => b.qty - a.qty),
-    koreksi: data.totals.koreksi || 0, koreksiCount: (data.koreksiList || []).length,
+    koreksi: data.totals.koreksi || 0, koreksiCount: data.koreksiCount !== undefined ? data.koreksiCount : (data.koreksiList || []).length,
   };
 }
 function prevMonths(y, m, count) {
@@ -865,28 +937,6 @@ function prevMonths(y, m, count) {
   return out;
 }
 const mkey = (y, m) => `${y}-${m}`;
-
-/* Muat 5 bulan sebelumnya (berurutan, hasilnya di-cache 10 menit) untuk perbandingan & tren 6 bulan. */
-function loadStatsHistory() {
-  const seq = ++MT.histSeq; MT.histErr = false;
-  const list = prevMonths(MT.year, MT.month, 5);
-  const step = i => {
-    if (i >= list.length || seq !== MT.histSeq) return;
-    const y = list[i][0], m = list[i][1], hit = MT.cache[mkey(y, m)];
-    if (hit && Date.now() - hit.t < 600000) { step(i + 1); return; }
-    google.script.run
-      .withSuccessHandler(res => {
-        if (seq !== MT.histSeq) return;
-        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
-        if (!res || !res.ok) { MT.histErr = true; renderStats(); return; }
-        MT.cache[mkey(y, m)] = { t: Date.now(), keluar: res.totals.keluar, masuk: res.totals.masuk, days: res.rows.length, monthName: res.monthName };
-        renderStats(); step(i + 1);
-      })
-      .withFailureHandler(() => { if (seq === MT.histSeq) { MT.histErr = true; renderStats(); } })
-      .getMonthlyTable(S.token, y, m);
-  };
-  step(0);
-}
 
 function svgAxis(W, H, ml, mr, mt, mb, maxV, n, stepX, labelEvery) {
   let s = '';
@@ -900,7 +950,7 @@ function svgAxis(W, H, ml, mr, mt, mb, maxV, n, stepX, labelEvery) {
   return s;
 }
 function chartDaily(data, st) {
-  const W = 340, H = 190, ml = 28, mr = 6, mt = 10, mb = 22, n = data.rows.length, pw = W - ml - mr, sx = pw / n, ph = H - mt - mb;
+  const W = 340, H = 190, ml = 28, mr = 6, mt = 10, mb = 22, n = st.n, pw = W - ml - mr, sx = pw / n, ph = H - mt - mb;
   const maxV = niceMax(Math.max(1, ...data.rows.slice(0, st.el).map(r => Math.max(r.keluar, r.masuk)), ...st.ma));
   const Y = v => mt + ph * (1 - v / maxV);
   let s = svgAxis(W, H, ml, mr, mt, mb, maxV, n, sx, 5);
@@ -915,7 +965,7 @@ function chartDaily(data, st) {
            legend: '<span class="lg k">Ambil</span><span class="lg m">Datang</span><span class="lg ma">Rata-rata 7 hari</span>' };
 }
 function chartStock(data, st) {
-  const W = 340, H = 190, ml = 28, mr = 6, mt = 10, mb = 22, n = data.rows.length, pw = W - ml - mr, sx = pw / n, ph = H - mt - mb;
+  const W = 340, H = 190, ml = 28, mr = 6, mt = 10, mb = 22, n = st.n, pw = W - ml - mr, sx = pw / n, ph = H - mt - mb;
   const vals = data.rows.slice(0, st.el).map(r => r.sisa).concat([data.openingStock]);
   const hi = niceMax(Math.max(30, ...vals)), lo = Math.min(0, ...vals);
   const Y = v => mt + ph * (1 - (v - lo) / (hi - lo));
@@ -961,7 +1011,7 @@ function chartWeekday(st) {
 }
 function trendSeries(st) {
   const cur = { y: MT.year, m: MT.month, keluar: st.keluar, masuk: st.masuk, cur: true };
-  const list = prevMonths(MT.year, MT.month, 5).reverse().map(p => { const c = MT.cache[mkey(p[0], p[1])]; return { y: p[0], m: p[1], keluar: c ? c.keluar : null, masuk: c ? c.masuk : null }; });
+  const list = prevMonths(MT.year, MT.month, 5).reverse().map(p => { const c = MT.stats && MT.stats.hist[mkey(p[0], p[1])]; return { y: p[0], m: p[1], keluar: c ? c.keluar : null, masuk: c ? c.masuk : null }; });
   return list.concat([cur]);
 }
 function chartTrend(st) {
@@ -990,19 +1040,23 @@ function deltaTag(cur, prev) {
 function tglLabel(r) { return r ? `${r.hari}, ${r.tgl}` : '—'; }
 
 function renderStats() {
-  const data = MT.lastData; if (!data || MT.tab !== 'stats') return;
-  const now = nowS(), st = computeMonthStats(data, now), pm = prevMonths(data.year, data.month, 1)[0], prev = pm ? MT.cache[mkey(pm[0], pm[1])] : null;
+  const SS = MT.stats; if (!SS || MT.tab !== 'stats') return;
+  const data = SS.data, meta = SS.meta || {};
+  const now = nowS(), st = computeMonthStats(data, now), pm = prevMonths(data.year, data.month, 1)[0], prev = pm ? SS.hist[mkey(pm[0], pm[1])] : null;
+  const avg7 = typeof meta.avg7 === 'number' ? meta.avg7 : st.avg7;   /* dari snapshot: 7 hari kalender terakhir s.d. kemarin */
   const prevAvg = prev && prev.days ? prev.keluar / prev.days : null;
   const isCur = now.getFullYear() === data.year && now.getMonth() + 1 === data.month;
-  let h = '';
+  const isAdmin = !!(S.user && S.user.role === 'admin');
+  let h = `<div class="st-meta"><span>Data hingga akhir <b>${esc(meta.through ? formatTanggalPendek(meta.through) : '—')}</b> · diperbarui ${esc(formatDicatat(meta.builtAt) || '—')}</span>` +
+          (isAdmin ? `<button type="button" class="st-refresh" id="stRefreshBtn">${ic('refresh','ms-18')}Perbarui</button>` : '') + '</div>';
   if (isCur) {   /* perkiraan: stok sekarang ÷ rata-rata ambil 7 hari terakhir */
     const lv = STOCK_LEVELS[stockLevel(S.stock)];
     let big, sub;
     if (S.stock <= 0) { big = 'Stok habis'; sub = 'Catat kedatangan atau lakukan koreksi stok.'; }
-    else if (st.avg7 <= 0) { big = '—'; sub = `Stok ${S.stock} galon · belum ada pengambilan dalam 7 hari terakhir.`; }
+    else if (avg7 <= 0) { big = '—'; sub = `Stok ${S.stock} galon · belum ada pengambilan dalam 7 hari terakhir.`; }
     else {
-      const days = Math.floor(S.stock / st.avg7), when = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
-      big = `≈ ${days} hari`; sub = `Stok ${S.stock} galon · rata-rata ambil ${fmtN(st.avg7)}/hari (7 hari terakhir) · sekitar ${formatTanggalPendek(toISODate(when))}`;
+      const days = Math.floor(S.stock / avg7), when = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+      big = `≈ ${days} hari`; sub = `Stok ${S.stock} galon · rata-rata ambil ${fmtN(avg7)}/hari (7 hari terakhir s.d. kemarin) · sekitar ${formatTanggalPendek(toISODate(when))}`;
     }
     h += `<div class="st-runway ${lv.key}">${ic('hourglass_bottom','ms-28')}<div><div class="st-lbl">Perkiraan stok cukup</div><div class="st-big">${esc(big)}</div><div class="st-sub">${esc(sub)}</div></div></div>`;
   }
@@ -1019,22 +1073,22 @@ function renderStats() {
     `<div class="st-card"><div class="st-lbl">${ic('tune','ms-18')}Koreksi Stok</div><div class="st-val ${st.koreksi > 0 ? 'plus' : st.koreksi < 0 ? 'minus' : ''}">${st.koreksi > 0 ? '+' : ''}${st.koreksi}</div><div class="st-sub">${st.koreksiCount} kali koreksi</div></div>` +
     '</div>';
   const d = chartDaily(data, st), sk = chartStock(data, st);
-  const hist = trendSeries(st).filter(x => !x.cur && x.keluar === null).length;
   h += `<figure class="st-chart"><figcaption>Ambil &amp; Datang per Hari</figcaption>${d.svg}<div class="st-legend">${d.legend}</div></figure>`;
   h += `<figure class="st-chart"><figcaption>Sisa Stok Harian</figcaption>${sk.svg}<div class="st-legend">${sk.legend}</div></figure>`;
   h += `<figure class="st-chart"><figcaption>Ambil per Petugas</figcaption>${chartUsers(st)}</figure>`;
   h += `<figure class="st-chart"><figcaption>Pola Ambil per Hari dalam Seminggu <small>(rata-rata)</small></figcaption>${chartWeekday(st)}</figure>`;
   h += `<figure class="st-chart"><figcaption>Tren 6 Bulan</figcaption>${chartTrend(st)}<div class="st-legend"><span class="lg k">Ambil</span><span class="lg m">Datang</span></div>` +
-       `<div class="st-note">${MT.histErr ? 'Sebagian bulan gagal dimuat. Buka ulang tab ini untuk mencoba lagi.' : hist ? 'Memuat bulan sebelumnya…' : '* bulan yang sedang dilihat'}</div></figure>`;
-  h += '<div class="st-note foot">Statistik dihitung dari tabel bulan ini. "Per hari" memakai hari yang sudah berjalan; perkiraan stok bersifat kasar.</div>';
+       `<div class="st-note">* bulan yang sedang dilihat</div></figure>`;
+  h += '<div class="st-note foot">Statistik memakai data sampai akhir hari kemarin dan diperbarui otomatis tiap tengah malam; transaksi hari ini baru masuk setelah itu (tab Tabel selalu terkini). "Per hari" memakai hari yang sudah berjalan; perkiraan stok bersifat kasar.</div>';
   E.mtStats.innerHTML = h;
+  const rb = E.mtStats.querySelector('#stRefreshBtn'); if (rb) rb.addEventListener('click', () => doRefreshStats(rb));
 }
 
 
 /* ── EXPORT: CSV (dibuka sebagai Excel) ──────────────────────── */
 function exportMonthlyCsv() {
   const data = MT.lastData;
-  if (!data) { toast('Data belum siap.', 'err'); return; }
+  if (!data || !monthMatches(data)) { toast('Buka tab Tabel dulu untuk mengekspor CSV.', 'err'); return; }
   const { rows, totals, users, openingStock, monthName, year, koreksiList } = data;
 
   const sep   = ';';
@@ -1094,7 +1148,7 @@ async function saveBlobFile(blob, filename) {
 
 /* ── EXPORT: PDF (via dialog print bawaan browser) ───────────── */
 function exportMonthlyPdf() {
-  if (!MT.lastData) { toast('Data belum siap.', 'err'); return; }
+  if (MT.tab === 'stats' ? !MT.stats : !MT.lastData) { toast('Data belum siap.', 'err'); return; }
   document.body.classList.add('mt-printing');
   toast('Di dialog cetak, pilih "Simpan sebagai PDF".', '', 5000);
   window.print();
