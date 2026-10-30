@@ -67,7 +67,7 @@ function restoreDraft() {
 }
 
 /* Monthly table state */
-const MT = { year: 0, month: 0, loading: false, seq: 0, tab: 'table', stats: null };
+const MT = { year: 0, month: 0, loading: false, seq: 0, tab: 'table', stats: null, error: '' };
 
 /* ── DOM REFS ────────────────── */
 const $ = id => document.getElementById(id);
@@ -796,7 +796,8 @@ const monthMatches = d => !!d && d.year === MT.year && d.month === MT.month;
 
 /* Snapshot (kolom ringkas) → bentuk data tabel + statistik. Baris: [keluar, masuk, koreksi, sisa, ...jumlah per petugas urut data.users]. */
 function snapshotToData(res) {
-  const d = res.data, yy = String(d.year).slice(-2), users = d.users || [];
+  const d = res.data, yy = String(d.year).slice(-2), users = d.users;
+  if (!Array.isArray(users)) { const e = new Error('Server belum diperbarui'); e.outdated = true; throw e; }   /* backend lama: tanpa kolom per petugas */
   const tglOf = (dateStr) => { const p = dateStr.split('-'); return `${p[2]}-${BULAN_SHORT_ID[Number(p[1])]}-${yy}`; };
   return {
     year: d.year, month: d.month, monthName: BULAN_ID[d.month], days: d.days, el: d.el, openingStock: d.openingStock, users,
@@ -816,28 +817,40 @@ function setStatsFromResponse(res) {
   MT.stats = { data: snapshotToData(res), meta: res.meta || {}, hist };
 }
 
+const OUTDATED_MSG = 'Server belum diperbarui (format data lama), sehingga kolom petugas dan catatan koreksi tidak tersedia. Salin Code.gs dan Logic.gs terbaru ke Apps Script, buat versi baru pada deployment, lalu buka laporan lagi.';
+function reportError(e, fallback) { return (e && e.outdated) ? OUTDATED_MSG : fallback; }
+
 /* Tabel dan Statistik memakai SATU sumber: snapshot harian (data s.d. akhir kemarin, diperbarui otomatis tiap tengah malam). */
 function loadReport() {
   const seq = ++MT.seq;
-  MT.stats = null; MT.loading = true; prepareReport(); applyView();
+  MT.stats = null; MT.error = ''; MT.loading = true; prepareReport();
+  E.mtWrap.innerHTML = ''; E.mtStats.innerHTML = '';   /* buang pesan galat / isi bulan sebelumnya */
+  applyView();
   google.script.run
     .withSuccessHandler(res => {
       if (seq !== MT.seq) return;   /* jawaban basi */
       MT.loading = false;
       if (!res || !res.ok) {
         if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
-        applyView(); toast((res && res.message) || 'Gagal memuat laporan.', 'err'); return;
+        MT.error = (res && res.message) || 'Gagal memuat laporan.'; applyView(); toast(MT.error, 'err'); return;
       }
-      try { setStatsFromResponse(res); } catch (e) { applyView(); toast('Respons laporan tidak valid.', 'err'); return; }
+      try { setStatsFromResponse(res); } catch (e) { MT.error = reportError(e, 'Respons laporan tidak valid.'); applyView(); toast(e.outdated ? 'Server belum diperbarui.' : MT.error, 'err'); return; }
       applyView();
     })
-    .withFailureHandler(err => { if (seq !== MT.seq) return; MT.loading = false; applyView(); toast((err && err.message) || 'Gagal memuat laporan.', 'err'); })
+    .withFailureHandler(err => { if (seq !== MT.seq) return; MT.loading = false; MT.error = (err && err.message) || 'Gagal memuat laporan.'; applyView(); toast(MT.error, 'err'); })
     .getStatsSnapshot(S.token, MT.year, MT.month);
 }
 
 /* Tampilkan Tabel atau Statistik dari data yang sudah dimuat (tanpa panggilan baru bila bulannya sama). */
 function applyView() {
   const table = MT.tab !== 'stats', has = !!MT.stats && monthMatches(MT.stats.data) && !MT.loading;
+  if (MT.error && !MT.stats && !MT.loading) {   /* gagal / server lama: tampilkan alasannya di area laporan, bukan layar kosong */
+    E.mtLoading.classList.add('hidden'); E.mtMeta.classList.add('hidden'); E.mtInfo.classList.add('hidden'); E.mtKoreksiNotes.classList.add('hidden');
+    const box = table ? E.mtWrap : E.mtStats, other = table ? E.mtStats : E.mtWrap;
+    other.classList.add('hidden'); box.classList.remove('hidden');
+    box.innerHTML = `<div class="st-empty err" role="alert">${esc(MT.error)}</div>`;
+    return;
+  }
   E.mtLoading.classList.toggle('hidden', !MT.loading);
   E.mtMeta.classList.toggle('hidden', !has);
   E.mtWrap.classList.toggle('hidden', !(has && table));
@@ -876,7 +889,7 @@ function doRefreshStats(btn) {
         if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
         toast((res && res.message) || 'Gagal memperbarui.', 'err'); renderMeta(); return;
       }
-      try { setStatsFromResponse(res); } catch (e) { toast('Respons laporan tidak valid.', 'err'); renderMeta(); return; }
+      try { setStatsFromResponse(res); } catch (e) { toast(e.outdated ? 'Server belum diperbarui.' : 'Respons laporan tidak valid.', 'err'); renderMeta(); return; }
       applyView(); toast(res.message || 'Data diperbarui.', 'ok'); setActivity();
     })
     .withFailureHandler(err => { if (seq !== MT.seq) return; toast((err && err.message) || 'Gagal memperbarui.', 'err'); renderMeta(); })

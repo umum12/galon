@@ -709,6 +709,7 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .tb-role { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--md-on-surface-variant); }
 .mt-meta { flex-shrink: 0; padding: 8px 16px; background: var(--md-surface-container-low); border-bottom: 1px solid var(--md-surface-container-high); }
 .mt-meta .st-meta { padding: 0; }
+.st-empty.err { margin: 16px; padding: 16px; text-align: left; line-height: 1.5; color: var(--md-on-error-container); background: var(--md-error-container); border: 1px solid #f5b8b2; border-radius: var(--r-lg); font-weight: 500; }
 
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {
