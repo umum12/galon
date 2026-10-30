@@ -666,9 +666,6 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .lv-row.danger { --lv: #ba1a1a; } .lv-row.empty { --lv: #5b5c66; } .lv-row.minus { --lv: #4a148c; }
 
 /* 15g. LAPORAN: TAB TABEL/STATISTIK + KARTU & GRAFIK ─── */
-.mt-tabs { display: flex; gap: 8px; padding: 8px 12px; flex-shrink: 0; border-bottom: 1px solid var(--md-surface-container-high); }
-.mt-tab { flex: 1; min-height: 44px; appearance: none; border: none; border-radius: var(--r-full); background: transparent; color: var(--md-on-surface-variant); font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: inset 0 0 0 1px var(--md-outline-variant); }
-.mt-tab.active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); box-shadow: none; }
 .mt-stats { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 12px 28px; background: var(--md-surface-container-low); display: flex; flex-direction: column; gap: 12px; }
 .st-runway { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 20px; border: 1px solid rgba(27,27,31,.08); }
 .st-runway.safe { background: #c4f2cd; color: #002109; } .st-runway.low { background: #fff1a6; color: #332800; } .st-runway.alert { background: #ffd8b0; color: #331500; }
@@ -701,7 +698,17 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .st-meta b { color: var(--md-on-surface); font-weight: 700; }
 .st-refresh { appearance: none; border: none; flex-shrink: 0; min-height: 36px; padding: 0 14px; border-radius: var(--r-full); background: var(--md-secondary-container); color: var(--md-on-secondary-container); font-size: 13px; font-weight: 700; cursor: pointer; touch-action: manipulation; display: inline-flex; align-items: center; gap: 6px; position: relative; overflow: hidden; }
 .st-refresh:disabled { opacity: .6; }
-@media print { body.mt-printing .mt-tabs { display: none !important; } body.mt-printing .mt-stats { overflow: visible; background: none; } body.mt-printing .st-chart, body.mt-printing .st-card { break-inside: avoid; } }
+@media print { body.mt-printing .st-refresh { display: none !important; } body.mt-printing .mt-stats { overflow: visible; background: none; } body.mt-printing .st-chart, body.mt-printing .st-card { break-inside: avoid; } }
+
+/* 15h. AKUN DI HEADER (kanan atas) + BARIS SUMBER DATA LAPORAN ─── */
+.tb-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.tb-user { appearance: none; border: none; background: transparent; color: inherit; text-align: left; cursor: pointer; touch-action: manipulation; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 44px; min-height: 44px; padding: 0; border-radius: var(--r-full); }
+.tb-user-text { display: none; flex-direction: column; line-height: 1.15; min-width: 0; }
+@media (min-width: 460px) { .tb-user { padding: 4px 12px 4px 4px; background: var(--md-surface-container-high); } .tb-user-text { display: flex; } }
+.tb-nama { font-size: 13px; font-weight: 500; max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-role { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--md-on-surface-variant); }
+.mt-meta { flex-shrink: 0; padding: 8px 16px; background: var(--md-surface-container-low); border-bottom: 1px solid var(--md-surface-container-high); }
+.mt-meta .st-meta { padding: 0; }
 
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {

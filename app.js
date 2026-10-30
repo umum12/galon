@@ -67,7 +67,7 @@ function restoreDraft() {
 }
 
 /* Monthly table state */
-const MT = { year: 0, month: 0, loading: false, lastData: null, seq: 0, tab: 'table', stats: null, statSeq: 0, statLoading: false };
+const MT = { year: 0, month: 0, loading: false, seq: 0, tab: 'table', stats: null };
 
 /* ── DOM REFS ────────────────── */
 const $ = id => document.getElementById(id);
@@ -94,7 +94,8 @@ const E = {
   photoCameraBtn: $('photoCameraBtn'), photoGalleryBtn: $('photoGalleryBtn'),
   photoRemoveBtn: $('photoRemoveBtn'),
   submitBtn: $('submitBtn'),
-  navAkun: $('navAkun'), navSaya: $('navSaya'), navInput: $('navInput'), navRiwayat: $('navRiwayat'), navLaporan: $('navLaporan'), historyTitle: $('historyTitle'),
+  navStatistik: $('navStatistik'), navSaya: $('navSaya'), navInput: $('navInput'), navRiwayat: $('navRiwayat'), navTabel: $('navTabel'),
+  menuBtn: $('menuBtn'), scNama: $('scNama'), scRole: $('scRole'), scAvatar: $('scAvatar'), historyTitle: $('historyTitle'),
   txList: $('txList'), pickerModal: $('pickerModal'), photoPickerCancelBtn: $('photoPickerCancelBtn'),
   historyModal: $('historyModal'), historyCloseBtn: $('historyCloseBtn'), historySub: $('historySub'),
   historyScroll: $('historyScroll'), historyLoading: $('historyLoading'),
@@ -121,7 +122,7 @@ const E = {
   mtTitle: $('mtTitle'), mtPrevBtn: $('mtPrevBtn'), mtNextBtn: $('mtNextBtn'),
   mtCloseBtn: $('mtCloseBtn'), mtInfo: $('mtInfo'),
   mtLoading: $('mtLoading'), mtWrap: $('mtWrap'), mtKoreksiNotes: $('mtKoreksiNotes'),
-  mtTabTable: $('mtTabTable'), mtTabStats: $('mtTabStats'), mtStats: $('mtStats'),
+  mtMeta: $('mtMeta'), mtPickerHeading: $('mtPickerHeading'), mtRenderLabel: $('mtRenderLabel'), mtRenderIc: $('mtRenderIc'), mtStats: $('mtStats'),
   mtExportPdfBtn: $('mtExportPdfBtn'), mtExportExcelBtn: $('mtExportExcelBtn'),
   mtPrintTitle: $('mtPrintTitle'),
   confirmModal: $('confirmModal'), confirmTitle: $('confirmTitle'), confirmMessage: $('confirmMessage'),
@@ -183,11 +184,12 @@ function formatTanggalPendek(raw) {  /* 'yyyy-MM-dd' → 'Sen, 05 Okt 2026' */
 }
 
 /* ── MENU OVERFLOW (Refresh / Admin / Logout) ─ */
-function openMenu()  { E.menuModal.classList.remove('hidden'); setNav('akun'); }
-function closeMenu() { E.menuModal.classList.add('hidden'); navReset('akun'); }
+function openMenu()  { E.menuModal.classList.remove('hidden'); }
+function closeMenu() { E.menuModal.classList.add('hidden'); }
 
-/* ── NAVBAR BAWAH: 5 menu. Akun = lembar menu, Riwayat/Laporan = lembar penuh di atas halaman Input. ── */
-const NAV_MAP = { akun:'navAkun', saya:'navSaya', input:'navInput', riwayat:'navRiwayat', laporan:'navLaporan' };
+/* ── NAVBAR BAWAH: Statistik · Riwayat Saya · Input · Riwayat Lengkap · Tabel. Selain Input = lembar penuh di atas halaman Input.
+   Statistik dan Tabel memakai laporan bulanan yang sama (data snapshot s.d. kemarin); mengetuk yang lain mengganti tampilannya. Akun: tombol di pojok kanan header. ── */
+const NAV_MAP = { statistik:'navStatistik', saya:'navSaya', input:'navInput', riwayat:'navRiwayat', tabel:'navTabel' };
 function setNav(name) {
   S.nav = name;
   Object.keys(NAV_MAP).forEach(k => {
@@ -199,15 +201,20 @@ function setNav(name) {
 function navReset(name) { if (S.nav === name) setNav('input'); }   /* lembar ditutup → kembali ke Input */
 function goNav(name) {
   setActivity();
+  const isReport = (name === 'statistik' || name === 'tabel'), view = name === 'statistik' ? 'stats' : 'table';
+  if (isReport && !E.monthlyModal.classList.contains('hidden')) {   /* laporan sudah terbuka */
+    closeMenu(); closeHistory();
+    if (MT.tab === view) { closeMonthlyTable(); setNav('input'); return; }   /* ketuk yang aktif = tutup */
+    switchReportView(view); return;
+  }
   const again = (S.nav === name && name !== 'input');   /* ketuk menu yang sedang aktif = tutup */
   closeMenu(); closeHistory(); closeMonthlyTable();
   setNav('input');
   if (again) return;
   if (name === 'input') { window.scrollTo({ top:0, behavior:'smooth' }); return; }
-  if (name === 'akun') openMenu();
-  else if (name === 'saya') openHistory(true);
+  if (name === 'saya') openHistory(true);
   else if (name === 'riwayat') openHistory(false);
-  else if (name === 'laporan') openMonthlyTable();
+  else if (isReport) openMonthlyTable(view);
 }
 
 /* ── CONFIRM MODAL (generik) ─── */
@@ -306,7 +313,8 @@ function renderStock(animate=false) {
   if (S.user) {
     const role  = S.user.role || 'petugas';
     const label = ROLE_LABEL[role] || role.toUpperCase();
-    E.menuAvatar.textContent = String(S.user.nama || '?').trim().charAt(0).toUpperCase();
+    E.scAvatar.textContent = E.menuAvatar.textContent = String(S.user.nama || '?').trim().charAt(0).toUpperCase();
+    E.scNama.textContent = S.user.nama; E.scRole.textContent = label;
     E.menuNama.textContent = S.user.nama; E.menuRole.textContent = label;
     const isDemo = role === 'demo', isAdmin = role === 'admin';
     E.adminBtn.classList.toggle('hidden', !isAdmin && !isDemo);
@@ -590,19 +598,28 @@ function buildMonthlySelects() {
   for (let y = MT_YEAR_MIN; y <= MT_YEAR_MAX; y++) E.mtYearSel.add(new Option(y, y));
 }
 
-function openMonthlyTable() {
+function openMonthlyTable(view) {
   const now = nowS();
   MT.year  = Math.min(MT_YEAR_MAX, Math.max(MT_YEAR_MIN, now.getFullYear()));
   MT.month = now.getMonth() + 1;
-  MT.lastData = null; MT.stats = null; MT.tab = 'table';
+  MT.stats = null; MT.tab = view === 'stats' ? 'stats' : 'table';
   buildMonthlySelects();
   E.mtMonthSel.value = String(MT.month);
   E.mtYearSel.value  = String(MT.year);
   E.monthlyModal.classList.remove('hidden');
-  setNav('laporan');
+  setNav(MT.tab === 'stats' ? 'statistik' : 'tabel');
+  updatePickerTexts();
   showPickerScreen();
 }
-function closeMonthlyTable() { E.monthlyModal.classList.add('hidden'); navReset('laporan'); }
+function closeMonthlyTable() { E.monthlyModal.classList.add('hidden'); navReset('statistik'); navReset('tabel'); }
+
+/* Teks kartu pemilih bulan mengikuti tampilan yang dipilih lewat navbar. */
+function updatePickerTexts() {
+  const st = MT.tab === 'stats';
+  E.mtPickerHeading.textContent = st ? 'Statistik Bulanan' : 'Tabel Bulanan';
+  E.mtRenderLabel.textContent   = st ? 'Tampilkan Statistik' : 'Tampilkan Tabel';
+  E.mtRenderIc.textContent      = st ? 'insights' : 'table_view';
+}
 
 function showPickerScreen() {
   E.monthlyModal.classList.add('mt-picking');      /* kartu kecil di tengah */
@@ -639,46 +656,9 @@ function prepareReport() {
   E.mtTitle.textContent = `${BULAN_ID[MT.month]} ${MT.year}`;
   updateMtNavBounds(E.mtPrevBtn, E.mtNextBtn);
 }
-/* Tab Tabel membaca data terkini (getMonthlyTable); tab Statistik membaca snapshot harian (getStatsSnapshot). Hanya tab aktif yang dimuat. */
-function loadMonthView() { if (MT.tab === 'stats') loadStats(); else fetchMonthlyTable(); }
-
-function fetchMonthlyTable() {
-  const seq = ++MT.seq;
-  MT.loading = true;
-
-  prepareReport();
-
-  /* Tampilkan loading, sembunyikan tabel, info & catatan koreksi */
-  E.mtLoading.classList.remove('hidden');
-  E.mtWrap.classList.add('hidden');
-  E.mtInfo.classList.add('hidden');
-  E.mtKoreksiNotes.classList.add('hidden');
-  E.mtStats.classList.add('hidden');
-  MT.lastData = null;
-  applyMtTabHeader();
-
-  google.script.run
-    .withSuccessHandler(res => {
-      if (seq !== MT.seq) return;   /* jawaban basi */
-      MT.loading = false;
-      if (!MT.statLoading) E.mtLoading.classList.add('hidden');
-      if (!res || !res.ok) {
-        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
-        toast((res&&res.message)||'Gagal memuat tabel.','err'); return;
-      }
-      renderMonthlyTable(res);
-    })
-    .withFailureHandler(err => {
-      if (seq !== MT.seq) return;
-      MT.loading = false;
-      if (!MT.statLoading) E.mtLoading.classList.add('hidden');
-      toast((err&&err.message)||'Gagal memuat tabel.','err');
-    })
-    .getMonthlyTable(S.token, MT.year, MT.month);
-}
+function loadMonthView() { loadReport(); }
 
 function renderMonthlyTable(data) {
-  MT.lastData = data; /* simpan untuk export — tanpa fetch ulang ke server */
 
   const { rows, totals, users, openingStock, monthName, year, koreksiList } = data;
 
@@ -695,6 +675,12 @@ function renderMonthlyTable(data) {
     koreksiInfoHtml +
     `<span>Sisa Akhir: <span class="bl">${totals.sisakAkhir}</span></span>`;
   E.mtInfo.classList.remove('hidden');
+
+  if (!rows.length) {   /* bulan berjalan tanggal 1 / bulan depan: belum ada hari yang tercakup snapshot */
+    E.mtWrap.innerHTML = '<div class="st-empty">Belum ada data untuk bulan ini (data sampai akhir kemarin).</div>';
+    E.mtWrap.classList.remove('hidden'); renderKoreksiNotes([]);
+    return;
+  }
 
   /* Build table HTML — urutan kolom: HARI, TGL, <petugas…>, ( − ), ( + ), SISA, ( ± ) */
   const koreksiTd = (v, zeroCls) =>
@@ -779,7 +765,6 @@ function renderMonthlyTable(data) {
 
   /* Catatan Koreksi Stok (stock opname) — terbaru di atas */
   renderKoreksiNotes(koreksiList || []);
-  if (MT.tab === 'table') applyMtTab();   /* tab Statistik aktif: data tabel hanya disimpan, tampilan tak berubah */
 }
 
 function renderKoreksiNotes(koreksiList) {
@@ -807,39 +792,22 @@ function renderKoreksiNotes(koreksiList) {
 }
 
 /* ═══ STATISTIK BULANAN (tab "Statistik") — dihitung di klien dari data tabel bulan yang sama ═══ */
-function applyMtTabHeader() {
-  const stats = MT.tab === 'stats';
-  E.mtTabTable.classList.toggle('active', !stats); E.mtTabStats.classList.toggle('active', stats);
-  E.mtTabTable.setAttribute('aria-selected', String(!stats)); E.mtTabStats.setAttribute('aria-selected', String(stats));
-}
 const monthMatches = d => !!d && d.year === MT.year && d.month === MT.month;
 
-function applyMtTab() {
-  applyMtTabHeader();
-  if (MT.tab === 'stats') {
-    E.mtWrap.classList.add('hidden'); E.mtInfo.classList.add('hidden'); E.mtKoreksiNotes.classList.add('hidden');
-    if (MT.stats && monthMatches(MT.stats.data) && !MT.statLoading) {
-      E.mtLoading.classList.add('hidden'); E.mtStats.classList.remove('hidden'); renderStats();
-    } else loadStats();
-  } else {
-    E.mtStats.classList.add('hidden');
-    if (MT.lastData && monthMatches(MT.lastData) && !MT.loading) {
-      E.mtLoading.classList.add('hidden'); E.mtWrap.classList.remove('hidden'); E.mtInfo.classList.remove('hidden');
-      renderKoreksiNotes(MT.lastData.koreksiList || []);
-    } else fetchMonthlyTable();
-  }
-}
-
-/* Snapshot (kolom ringkas) → bentuk data yang sama dengan tabel, supaya computeMonthStats/grafik dipakai ulang. */
+/* Snapshot (kolom ringkas) → bentuk data tabel + statistik. Baris: [keluar, masuk, koreksi, sisa, ...jumlah per petugas urut data.users]. */
 function snapshotToData(res) {
-  const d = res.data;
+  const d = res.data, yy = String(d.year).slice(-2), users = d.users || [];
+  const tglOf = (dateStr) => { const p = dateStr.split('-'); return `${p[2]}-${BULAN_SHORT_ID[Number(p[1])]}-${yy}`; };
   return {
-    year: d.year, month: d.month, days: d.days, el: d.el, openingStock: d.openingStock, totals: d.totals, koreksiCount: d.koreksiCount,
+    year: d.year, month: d.month, monthName: BULAN_ID[d.month], days: d.days, el: d.el, openingStock: d.openingStock, users,
+    totals: d.totals, koreksiCount: d.koreksiCount, koreksiTruncated: !!d.koreksiTruncated,
     rows: d.rows.map((a, i) => {
-      const day = i + 1, dow = new Date(d.year, d.month - 1, day).getDay();
-      return { hari: HARI_SHORT_ID[dow], tgl: `${pad2(day)}-${BULAN_SHORT_ID[d.month]}-${String(d.year).slice(-2)}`,
-               date: `${d.year}-${pad2(d.month)}-${pad2(day)}`, keluar: a[0], masuk: a[1], koreksi: a[2], sisa: a[3] };
+      const day = i + 1, dow = new Date(d.year, d.month - 1, day).getDay(), u = {};
+      users.forEach((k, j) => { u[k] = a[4 + j] || 0; });
+      return { hari: HARI_SHORT_ID[dow], tgl: `${pad2(day)}-${BULAN_SHORT_ID[d.month]}-${yy}`, date: `${d.year}-${pad2(d.month)}-${pad2(day)}`,
+               isWeekend: dow === 0 || dow === 6, users: u, keluar: a[0], masuk: a[1], koreksi: a[2], sisa: a[3] };
     }),
+    koreksiList: (d.koreksi || []).map(k => ({ date: k[0], tgl: tglOf(k[0]), time: k[1], nama: k[2], delta: k[3], note: k[4] })),
   };
 }
 function setStatsFromResponse(res) {
@@ -848,42 +816,70 @@ function setStatsFromResponse(res) {
   MT.stats = { data: snapshotToData(res), meta: res.meta || {}, hist };
 }
 
-function loadStats() {
-  const seq = ++MT.statSeq;
-  MT.stats = null; MT.statLoading = true; prepareReport();
-  E.mtLoading.classList.remove('hidden');
-  E.mtWrap.classList.add('hidden'); E.mtInfo.classList.add('hidden'); E.mtKoreksiNotes.classList.add('hidden'); E.mtStats.classList.add('hidden');
+/* Tabel dan Statistik memakai SATU sumber: snapshot harian (data s.d. akhir kemarin, diperbarui otomatis tiap tengah malam). */
+function loadReport() {
+  const seq = ++MT.seq;
+  MT.stats = null; MT.loading = true; prepareReport(); applyView();
   google.script.run
     .withSuccessHandler(res => {
-      if (seq !== MT.statSeq) return;   /* jawaban basi */
-      MT.statLoading = false; E.mtLoading.classList.add('hidden');
+      if (seq !== MT.seq) return;   /* jawaban basi */
+      MT.loading = false;
       if (!res || !res.ok) {
         if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
-        toast((res && res.message) || 'Gagal memuat statistik.', 'err'); return;
+        applyView(); toast((res && res.message) || 'Gagal memuat laporan.', 'err'); return;
       }
-      try { setStatsFromResponse(res); } catch (e) { toast('Respons statistik tidak valid.', 'err'); return; }
-      if (MT.tab === 'stats') { E.mtStats.classList.remove('hidden'); renderStats(); }
+      try { setStatsFromResponse(res); } catch (e) { applyView(); toast('Respons laporan tidak valid.', 'err'); return; }
+      applyView();
     })
-    .withFailureHandler(err => { if (seq !== MT.statSeq) return; MT.statLoading = false; E.mtLoading.classList.add('hidden'); toast((err && err.message) || 'Gagal memuat statistik.', 'err'); })
+    .withFailureHandler(err => { if (seq !== MT.seq) return; MT.loading = false; applyView(); toast((err && err.message) || 'Gagal memuat laporan.', 'err'); })
     .getStatsSnapshot(S.token, MT.year, MT.month);
 }
 
-/* Admin: paksa pembaruan snapshot sekarang (transaksi/koreksi hari ini baru masuk statistik setelah pembaruan). */
+/* Tampilkan Tabel atau Statistik dari data yang sudah dimuat (tanpa panggilan baru bila bulannya sama). */
+function applyView() {
+  const table = MT.tab !== 'stats', has = !!MT.stats && monthMatches(MT.stats.data) && !MT.loading;
+  E.mtLoading.classList.toggle('hidden', !MT.loading);
+  E.mtMeta.classList.toggle('hidden', !has);
+  E.mtWrap.classList.toggle('hidden', !(has && table));
+  E.mtInfo.classList.toggle('hidden', !(has && table));
+  E.mtStats.classList.toggle('hidden', !(has && !table));
+  if (!has || !table) E.mtKoreksiNotes.classList.add('hidden');
+  if (!has) return;
+  E.mtPrintTitle.textContent = `${table ? 'Tabel' : 'Statistik'} Galon — ${MT.stats.data.monthName} ${MT.stats.data.year}`;
+  renderMeta();
+  if (table) renderMonthlyTable(MT.stats.data); else renderStats();
+}
+function switchReportView(view) {
+  MT.tab = view; setNav(view === 'stats' ? 'statistik' : 'tabel'); updatePickerTexts();
+  if (!E.mtReportScreen.classList.contains('hidden')) {   /* laporan sedang tampil: ganti tampilan; bulan lain → muat */
+    if (MT.stats && monthMatches(MT.stats.data)) applyView(); else loadReport();
+  }
+}
+
+/* Label sumber data + (admin) tombol perbarui — sama untuk Tabel dan Statistik. */
+function renderMeta() {
+  const meta = (MT.stats && MT.stats.meta) || {}, isAdmin = !!(S.user && S.user.role === 'admin');
+  E.mtMeta.innerHTML = `<div class="st-meta"><span>Data hingga akhir <b>${esc(meta.through ? formatTanggalPendek(meta.through) : '—')}</b> · diperbarui ${esc(formatDicatat(meta.builtAt) || '—')}</span>` +
+    (isAdmin ? `<button type="button" class="st-refresh" id="stRefreshBtn">${ic('refresh','ms-18')}Perbarui</button>` : '') + '</div>';
+  const rb = E.mtMeta.querySelector('#stRefreshBtn'); if (rb) rb.addEventListener('click', () => doRefreshStats(rb));
+}
+
+/* Admin: paksa pembaruan snapshot sekarang (transaksi/koreksi hari ini baru masuk setelah pembaruan). */
 function doRefreshStats(btn) {
   if (S.user && S.user.role !== 'admin') return;
-  const seq = ++MT.statSeq;
+  const seq = ++MT.seq;
   btn.disabled = true; btn.innerHTML = loadingBar() + 'Memperbarui…';
   google.script.run
     .withSuccessHandler(res => {
-      if (seq !== MT.statSeq) return;
+      if (seq !== MT.seq) return;
       if (!res || !res.ok) {
         if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
-        toast((res && res.message) || 'Gagal memperbarui statistik.', 'err'); renderStats(); return;
+        toast((res && res.message) || 'Gagal memperbarui.', 'err'); renderMeta(); return;
       }
-      try { setStatsFromResponse(res); } catch (e) { toast('Respons statistik tidak valid.', 'err'); renderStats(); return; }
-      renderStats(); toast(res.message || 'Statistik diperbarui.', 'ok'); setActivity();
+      try { setStatsFromResponse(res); } catch (e) { toast('Respons laporan tidak valid.', 'err'); renderMeta(); return; }
+      applyView(); toast(res.message || 'Data diperbarui.', 'ok'); setActivity();
     })
-    .withFailureHandler(err => { if (seq !== MT.statSeq) return; toast((err && err.message) || 'Gagal memperbarui statistik.', 'err'); renderStats(); })
+    .withFailureHandler(err => { if (seq !== MT.seq) return; toast((err && err.message) || 'Gagal memperbarui.', 'err'); renderMeta(); })
     .refreshStatsNow(S.token, MT.year, MT.month);
 }
 
@@ -1040,15 +1036,13 @@ function deltaTag(cur, prev) {
 function tglLabel(r) { return r ? `${r.hari}, ${r.tgl}` : '—'; }
 
 function renderStats() {
-  const SS = MT.stats; if (!SS || MT.tab !== 'stats') return;
+  const SS = MT.stats; if (!SS) return;
   const data = SS.data, meta = SS.meta || {};
   const now = nowS(), st = computeMonthStats(data, now), pm = prevMonths(data.year, data.month, 1)[0], prev = pm ? SS.hist[mkey(pm[0], pm[1])] : null;
   const avg7 = typeof meta.avg7 === 'number' ? meta.avg7 : st.avg7;   /* dari snapshot: 7 hari kalender terakhir s.d. kemarin */
   const prevAvg = prev && prev.days ? prev.keluar / prev.days : null;
   const isCur = now.getFullYear() === data.year && now.getMonth() + 1 === data.month;
-  const isAdmin = !!(S.user && S.user.role === 'admin');
-  let h = `<div class="st-meta"><span>Data hingga akhir <b>${esc(meta.through ? formatTanggalPendek(meta.through) : '—')}</b> · diperbarui ${esc(formatDicatat(meta.builtAt) || '—')}</span>` +
-          (isAdmin ? `<button type="button" class="st-refresh" id="stRefreshBtn">${ic('refresh','ms-18')}Perbarui</button>` : '') + '</div>';
+  let h = '';
   if (isCur) {   /* perkiraan: stok sekarang ÷ rata-rata ambil 7 hari terakhir */
     const lv = STOCK_LEVELS[stockLevel(S.stock)];
     let big, sub;
@@ -1081,19 +1075,19 @@ function renderStats() {
        `<div class="st-note">* bulan yang sedang dilihat</div></figure>`;
   h += '<div class="st-note foot">Statistik memakai data sampai akhir hari kemarin dan diperbarui otomatis tiap tengah malam; transaksi hari ini baru masuk setelah itu (tab Tabel selalu terkini). "Per hari" memakai hari yang sudah berjalan; perkiraan stok bersifat kasar.</div>';
   E.mtStats.innerHTML = h;
-  const rb = E.mtStats.querySelector('#stRefreshBtn'); if (rb) rb.addEventListener('click', () => doRefreshStats(rb));
 }
 
 
 /* ── EXPORT: CSV (dibuka sebagai Excel) ──────────────────────── */
 function exportMonthlyCsv() {
-  const data = MT.lastData;
-  if (!data || !monthMatches(data)) { toast('Buka tab Tabel dulu untuk mengekspor CSV.', 'err'); return; }
+  const data = MT.stats && MT.stats.data;
+  if (!data || !monthMatches(data)) { toast('Data belum siap.', 'err'); return; }
   const { rows, totals, users, openingStock, monthName, year, koreksiList } = data;
 
   const sep   = ';';
   const lines = [];
   lines.push(`Tabel Galon - ${monthName} ${year}`);
+  if (MT.stats.meta && MT.stats.meta.through) lines.push(`Data hingga akhir ${MT.stats.meta.through}`);
   lines.push('');
   lines.push(['Hari', 'Tanggal', ...users, '(-)', '(+)', 'Sisa', '(±)'].join(sep));
   lines.push(['', 'Sisa Awal', ...users.map(() => ''), '', '', openingStock, ''].join(sep));
@@ -1148,7 +1142,7 @@ async function saveBlobFile(blob, filename) {
 
 /* ── EXPORT: PDF (via dialog print bawaan browser) ───────────── */
 function exportMonthlyPdf() {
-  if (MT.tab === 'stats' ? !MT.stats : !MT.lastData) { toast('Data belum siap.', 'err'); return; }
+  if (!MT.stats || !monthMatches(MT.stats.data)) { toast('Data belum siap.', 'err'); return; }
   document.body.classList.add('mt-printing');
   toast('Di dialog cetak, pilih "Simpan sebagai PDF".', '', 5000);
   window.print();
@@ -1644,6 +1638,7 @@ function bindEvents() {
   E.loginBtn.addEventListener('click', doLogin);
   E.codeInput.addEventListener('keydown', ev=>{ if(ev.key==='Enter') doLogin(); });
 
+  E.menuBtn.addEventListener('click', ()=>{ setActivity(); openMenu(); });
   E.menuModal.addEventListener('click', ev=>{ if(ev.target===E.menuModal) closeMenu(); });
 
   E.refreshBtn.addEventListener('click', ()=>{ closeMenu(); setActivity(); loadDashboard(false); });
@@ -1704,8 +1699,6 @@ function bindEvents() {
   E.mtExportPdfBtn.addEventListener('click', exportMonthlyPdf);
   E.mtExportExcelBtn.addEventListener('click', exportMonthlyCsv);
   E.monthlyModal.addEventListener('click', ev=>{ if(ev.target===E.monthlyModal) closeMonthlyTable(); });
-  E.mtTabTable.addEventListener('click', ()=>{ MT.tab = 'table'; setActivity(); applyMtTab(); });
-  E.mtTabStats.addEventListener('click', ()=>{ MT.tab = 'stats'; setActivity(); applyMtTab(); });
   E.mtPrevBtn.addEventListener('click', ()=> stepReportMonth(-1));
   E.mtNextBtn.addEventListener('click', ()=> stepReportMonth(1));
 
