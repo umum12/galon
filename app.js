@@ -75,7 +75,7 @@ const E = {
   codeInput: $('codeInput'), loginBtn: $('loginBtn'), loginError: $('loginError'),
   stockCard: $('stockCard'), scAppName: $('scAppName'), scClock: $('scClock'),
   menuModal: $('menuModal'),
-  refreshBtn: $('refreshBtn'), adminBtn: $('adminBtn'), logoutBtn: $('logoutBtn'),
+  refreshBtn: $('refreshBtn'), adminBtn: $('adminBtn'), logoutBtn: $('logoutBtn'), fxBtn: $('fxBtn'), fxIcon: $('fxIcon'), fxLabel: $('fxLabel'),
   stockNumber: $('stockNumber'), stockStatusPill: $('stockStatusPill'), stockStatusText: $('stockStatusText'),
   statMasuk: $('statMasuk'), statKeluar: $('statKeluar'),
   statMasukLabel: $('statMasukLabel'), statKeluarLabel: $('statKeluarLabel'),
@@ -165,6 +165,55 @@ const Splash = {
   },
   cancel() { this._clear(); this.el.classList.add('hide'); }
 };
+
+/* ── SUARA & GETARAN ─────────────────
+   Nada disintesis lewat Web Audio (tanpa berkas audio) + Vibration API. Pengguna bisa mematikannya di menu Akun (tersimpan di perangkat).
+   Catatan platform: iPhone tidak mendukung getaran lewat web; suara mengikuti tombol senyap. Sebelum ketukan pertama browser memblokir
+   suara/getaran, jadi isyarat "masuk" saat aplikasi terbuka otomatis hanya terdengar bila sudah ada ketukan. */
+const FX_KEY = 'galon_fx';
+const FX = { on: true, ctx: null };
+try { FX.on = localStorage.getItem(FX_KEY) !== '0'; } catch (_) {}
+/* [frekuensi Hz, mulai (dtk), durasi (dtk), jenis gelombang] */
+const FX_CUES = {
+  plus:    { v: 8,  n: [[880, 0, .045]] },
+  minus:   { v: 8,  n: [[620, 0, .045]] },
+  tap:     { v: 18, n: [[520, 0, .07]] },
+  warn:    { v: [70, 50, 70],    n: [[330, 0, .11, 'square'], [330, .16, .11, 'square']] },
+  success: { v: [30, 50, 30],    n: [[660, 0, .09], [880, .1, .09], [1320, .2, .18]] },
+  fail:    { v: [140, 60, 140],  n: [[300, 0, .16, 'sawtooth'], [210, .19, .26, 'sawtooth']] },
+  welcome: { v: 20, n: [[523, 0, .09], [784, .1, .16]] },
+};
+function buzz(v) { if (FX.on && navigator.vibrate) { try { navigator.vibrate(v); } catch (_) {} } }
+function fxCtx() {
+  if (!FX.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; try { FX.ctx = new AC(); } catch (_) { return null; } }
+  if (FX.ctx.state === 'suspended') { try { FX.ctx.resume().catch(() => {}); } catch (_) {} }
+  return FX.ctx;
+}
+function fx(name) {
+  if (!FX.on) return;
+  const c = FX_CUES[name]; if (!c) return;
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;   /* belum ada ketukan: browser memblokir */
+  buzz(c.v);
+  try {
+    const ac = fxCtx(); if (!ac) return;
+    const t0 = ac.currentTime + 0.02;
+    c.n.forEach(([f, at, dur, type]) => {
+      const o = ac.createOscillator(), g = ac.createGain(), s = t0 + at, vol = (type === 'square' || type === 'sawtooth') ? .07 : .16;
+      o.type = type || 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(vol, s + .008); g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+      o.connect(g); g.connect(ac.destination); o.start(s); o.stop(s + dur + .02);
+    });
+  } catch (_) {}
+}
+function renderFx() {
+  E.fxLabel.textContent = 'Suara & Getaran: ' + (FX.on ? 'Aktif' : 'Mati');
+  E.fxIcon.textContent  = FX.on ? 'volume_up' : 'volume_off';
+}
+function toggleFx() {
+  FX.on = !FX.on;
+  try { localStorage.setItem(FX_KEY, FX.on ? '1' : '0'); } catch (_) {}
+  renderFx(); if (FX.on) fx('plus');   /* contoh bunyi saat dinyalakan */
+}
 
 /* ── WAKTU TRANSAKSI (tanggal/jam kejadian) ─ */
 function pad2(n) { return String(n).padStart(2,'0'); }
@@ -487,7 +536,7 @@ function setupLongPress(el, tx) {
   function onStart(x,y) {
     startX=x; startY=y;
     el.classList.add('pressing');
-    timer = setTimeout(() => { timer=null; el.classList.remove('pressing'); if(navigator.vibrate) navigator.vibrate(30); handleLongPress(tx); }, LONG_PRESS_MS);
+    timer = setTimeout(() => { timer=null; el.classList.remove('pressing'); buzz(30); handleLongPress(tx); }, LONG_PRESS_MS);
   }
   function onCancel() { if(timer){clearTimeout(timer);timer=null;} el.classList.remove('pressing'); }
   el.addEventListener('touchstart', e=>{const t=e.touches[0];onStart(t.clientX,t.clientY);},{passive:true});
@@ -579,8 +628,8 @@ function updateEditPreview() {
     : `Stok akan berubah: ${S.stock} → ${S.stock+delta}`;
 }
 function stepEditQty(d) {
-  const q = readEditQty() || 1;
-  E.editQtyInput.value = Math.max(1, Math.min(999, q + d));
+  const q = readEditQty() || 1, n = Math.max(1, Math.min(999, q + d));
+  E.editQtyInput.value = n; if (n !== q) fx(d > 0 ? 'plus' : 'minus');
   updateEditPreview(); setActivity();
 }
 function checkWhenRange(date, time) {
@@ -1332,12 +1381,13 @@ function handleSubmitTap() {
   if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
   setActivity();
   if (S.submitState==='submitting') return;   /* cegah klik berulang selama proses */
-  if (!Number.isInteger(S.qty)||S.qty<1) { toast('Jumlah harus lebih dari 0.','err'); return; }
-  if (S.mode==='DATANG'&&!S.photoDataUrl) { toast('Foto invoice belum diambil.','err'); return; }
+  if (!Number.isInteger(S.qty)||S.qty<1) { fx('warn'); toast('Jumlah harus lebih dari 0.','err'); return; }
+  if (S.mode==='DATANG'&&!S.photoDataUrl) { fx('warn'); toast('Foto invoice belum diambil.','err'); return; }
   const w = readTxWhen();
-  if (w.error) { toast(w.error,'err'); return; }
+  if (w.error) { fx('warn'); toast(w.error,'err'); return; }
 
   /* Tanpa dialog konfirmasi: data langsung diproses. */
+  fx('tap');
   setSubmitState('submitting');
   doSaveTransaction();
 }
@@ -1428,7 +1478,7 @@ function doLogin() {
       showView('main'); setMode('AMBIL');
       if (res.stock !== undefined) applyData(res); else loadDashboard(false);   /* login sudah membawa data dashboard */
       Splash.finish();   /* bilah penuh lalu splash memudar, menu utama sudah siap di belakangnya */
-      toast(`Masuk sebagai ${res.user.kode}`,'ok');
+      toast(`Masuk sebagai ${res.user.kode}`,'ok'); fx('welcome');
       restoreDraft();
     })
     .withFailureHandler(err=>{ E.loginBtn.disabled=false; Splash.cancel(); setLoginError((err&&err.message)||'Koneksi gagal.'); })
@@ -1496,7 +1546,7 @@ function newestOwnTxKey(list) {
   const t = mine.reduce((a, b) => String(b.timestamp) > String(a.timestamp) ? b : a);
   return `${t.timestamp}|${t.kode}`;
 }
-function flashTx(key) { S.flash = key || ''; if (key && navigator.vibrate) navigator.vibrate(40); }
+function flashTx(key) { S.flash = key || ''; if (key) buzz(40); }
 function clearFlashLater() {
   if (!S.flash) return;
   setTimeout(() => {
@@ -1513,15 +1563,15 @@ function doSaveTransaction() {
       submitProgressEnd(!!(res&&res.ok), ()=>{
         setSubmitState('idle');   /* tombol kembali normal, berhasil maupun gagal */
         if(res&&res.message==='SESSION_EXPIRED'){onSessionExpired();return;}
-        if(!res||!res.ok){toast('Gagal menyimpan: '+((res&&res.message)||'tidak ada respons dari server.'),'err',4500);return;}
+        if(!res||!res.ok){fx('fail');toast('Gagal menyimpan: '+((res&&res.message)||'tidak ada respons dari server.'),'err',4500);return;}
         E.noteInput.value=''; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
-        S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater();
+        S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater(); fx('success');
         const sisa = Number(res.stock);
         toast(`${mode==='AMBIL'?'Ambil':'Galon datang'} ${qty} galon tersimpan. Sisa stok: ${sisa}${sisa<0?' (minus, cek pencatatan)':''}.`,'ok',4000);
         setActivity();
       });
     })
-    .withFailureHandler(err=>{ submitProgressEnd(false, ()=>{ setSubmitState('idle'); toast('Gagal menyimpan: '+((err&&err.message)||'koneksi bermasalah.'),'err',4500); }); })
+    .withFailureHandler(err=>{ submitProgressEnd(false, ()=>{ setSubmitState('idle'); fx('fail'); toast('Gagal menyimpan: '+((err&&err.message)||'koneksi bermasalah.'),'err',4500); }); })
     .saveTransaction({token:S.token,type:mode,qty:qty,note:E.noteInput.value.trim(),photoDataUrl:mode==='DATANG'?S.photoDataUrl:'',photoName:S.photoName,txDate:S.txCustom?E.txDateInput.value:'',txTime:S.txCustom?E.txTimeInput.value:''});
 }
 
@@ -1686,6 +1736,7 @@ function bindEvents() {
   E.menuBtn.addEventListener('click', ()=>{ setActivity(); openMenu(); });
   E.menuModal.addEventListener('click', ev=>{ if(ev.target===E.menuModal) closeMenu(); });
 
+  E.fxBtn.addEventListener('click', ()=>{ setActivity(); toggleFx(); });
   E.refreshBtn.addEventListener('click', ()=>{ closeMenu(); setActivity(); loadDashboard(false); });
   E.logoutBtn.addEventListener('click',  ()=>{
     closeMenu();
@@ -1696,8 +1747,8 @@ function bindEvents() {
   E.modeAmbilBtn.addEventListener('click', ()=>setMode('AMBIL'));
   E.modeDatangBtn.addEventListener('click', ()=>setMode('DATANG'));
 
-  E.minusBtn.addEventListener('click', ()=>{ S.qty=Math.max(0,S.qty-1); E.qtyInput.value=S.qty; updateSubmitText(); setActivity(); });
-  E.plusBtn.addEventListener('click',  ()=>{ S.qty=Math.min(999,S.qty+1); E.qtyInput.value=S.qty; updateSubmitText(); setActivity(); });
+  E.minusBtn.addEventListener('click', ()=>{ const was=S.qty; S.qty=Math.max(0,S.qty-1); E.qtyInput.value=S.qty; if(S.qty!==was) fx('minus'); updateSubmitText(); setActivity(); });
+  E.plusBtn.addEventListener('click',  ()=>{ const was=S.qty; S.qty=Math.min(999,S.qty+1); E.qtyInput.value=S.qty; if(S.qty!==was) fx('plus'); updateSubmitText(); setActivity(); });
   E.qtyInput.addEventListener('input', ()=>{ const v=parseInt(E.qtyInput.value,10); S.qty=(Number.isInteger(v)&&v>=0)?Math.min(999,v):0; updateSubmitText(); setActivity(); });
   E.qtyInput.addEventListener('blur',  ()=>{ E.qtyInput.value=S.qty; });
 
@@ -1814,7 +1865,7 @@ function init() {
   Splash.show('Memulai…');
   bindEvents();
   bindKeyboardAwareScroll();
-  updateClock();
+  updateClock(); renderFx();
   const cache = loadCache(), auth = loadAuth();
   if (!auth && (!cache || !cache.token)) {   /* belum pernah masuk / sudah Keluar */
     clearCache(); showView('login'); setTimeout(()=>E.codeInput.focus(),80); Splash.finish(true); return;
@@ -1834,7 +1885,7 @@ function init() {
   /* Ada kode tersimpan: hubungkan ke server dan periksa kode akses sebelum masuk. */
   Splash.show('Menghubungkan ke server…', [[1600,'Memverifikasi kode akses…'],[6000,'Masih memuat, mohon tunggu…']]);
   silentLogin(auth.code, (ok, fatal, msg) => {
-    if (ok) { showView('main'); setMode('AMBIL'); renderStock(false); renderRecent(); renderAnnouncements(); renderSync(); Splash.finish(); return; }
+    if (ok) { showView('main'); setMode('AMBIL'); renderStock(false); renderRecent(); renderAnnouncements(); renderSync(); Splash.finish(); fx('welcome'); return; }
     if (fatal) { clearAuth(); clearCache(); showView('login'); setLoginError(msg); Splash.finish(true); return; }   /* kode ditolak server */
     if (cache && cache.token) {   /* koneksi gagal: tampilkan data terakhir agar tetap bisa dilihat */
       showCached(); S.syncError = true; renderSync(); Splash.finish(true);
