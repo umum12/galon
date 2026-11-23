@@ -728,6 +728,16 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .hf-dateedit .tf { flex: 1; min-width: 0; }
 #historyMore { margin: 14px 0 6px; }
 
+/* 15j. FOTO INVOICE 1–2 LEMBAR + THUMBNAIL DI KARTU TRANSAKSI ─── */
+.photo-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.photo-grid.two { grid-template-columns: 1fr 1fr; }
+.photo-grid.two .photo-thumb { min-height: 132px; padding: 12px; flex-direction: column; font-size: 12px; gap: 6px; }
+.photo-grid.two .photo-thumb img { max-height: 176px; }
+.photo-hint { margin-top: 6px; font-size: 12px; text-align: center; color: var(--md-on-surface-variant); }
+.tx-thumbs { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.tx-thumb { width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; background: var(--md-surface-container); border: 1px solid var(--md-outline-variant); color: var(--md-on-surface-variant); }
+.tx-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

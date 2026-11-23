@@ -20,7 +20,7 @@ const S = {
   appName: APP_NAME, status: 'safe',
   recent: [], month: { masuk: 0, keluar: 0 }, monthLabel: '—',
   mode: 'AMBIL', qty: 0,
-  photoDataUrl: '', photoName: '',
+  photos: [], photoTarget: 0,   /* foto invoice yang dipilih: [{dataUrl, name}], maks. 2; photoTarget = slot yang sedang dipilih */
   lastActivity: Date.now(),
   submitState: 'idle',
   pendingDelete: null,
@@ -88,10 +88,9 @@ const E = {
   modeAmbilBtn: $('modeAmbilBtn'), modeDatangBtn: $('modeDatangBtn'),
   qtyInput: $('qtyInput'), minusBtn: $('minusBtn'), plusBtn: $('plusBtn'),
   noteInput: $('noteInput'),
-  photoSection: $('photoSection'), photoThumb: $('photoThumb'),
+  photoSection: $('photoSection'), photoGrid: $('photoGrid'), photoBoxes: [$('photoBox0'), $('photoBox1')], photoThumbs: [$('photoThumb0'), $('photoThumb1')], photoRemoves: [$('photoRemove0'), $('photoRemove1')],
   photoInputCamera: $('photoInputCamera'), photoInputGallery: $('photoInputGallery'),
   photoCameraBtn: $('photoCameraBtn'), photoGalleryBtn: $('photoGalleryBtn'),
-  photoRemoveBtn: $('photoRemoveBtn'),
   submitBtn: $('submitBtn'),
   navStatistik: $('navStatistik'), navSaya: $('navSaya'), navInput: $('navInput'), navRiwayat: $('navRiwayat'), navTabel: $('navTabel'),
   menuBtn: $('menuBtn'), scNama: $('scNama'), scRole: $('scRole'), scAvatar: $('scAvatar'), historyTitle: $('historyTitle'),
@@ -436,6 +435,16 @@ function renderStock(animate=false) {
    Lencana: JENIS · BARU (hari ini) · SUSULAN (waktu kejadian ≠ waktu input) · EDIT (pernah diedit). */
 const TX_LABEL = { AMBIL: ['Ambil', 'logout'], DATANG: ['Datang', 'login'], KOREKSI: ['Koreksi', 'tune'] };
 function txPill(cls, icon, label) { return `<span class="tx-pill ${cls}">${ic(icon, 'ms-16')}${label}</span>`; }
+/* Foto transaksi: 1–2 tautan (klien lama/cache lama hanya punya photoUrl). Hanya http(s) — tolak javascript:/data:. */
+function txPhotos(tx) {
+  const list = Array.isArray(tx.photoUrls) && tx.photoUrls.length ? tx.photoUrls : (tx.photoUrl ? [tx.photoUrl] : []);
+  return list.map(String).filter(u => /^https?:\/\//i.test(u)).slice(0, 2);
+}
+/* Alamat gambar kecil dari tautan Drive (butuh berkas dibagikan "siapa pun dengan tautan"); selain Drive → tanpa thumbnail. */
+function driveThumb(url) {
+  const m = String(url).match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/) || String(url).match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+  return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w200` : '';
+}
 function buildTxItem(tx, colorClass, mine) {
   const isAmbil=tx.jenis==='AMBIL', isKoreksi=tx.jenis==='KOREKSI';
   const pillClass = isKoreksi?'koreksi':isAmbil?'ambil':'datang';
@@ -447,8 +456,11 @@ function buildTxItem(tx, colorClass, mine) {
     (tx.susulan  ? txPill('susulan', 'history_toggle_off', 'Susulan') : '') +
     (tx.editedAt ? txPill('edit',    'edit',               'Edit')    : '');
   const noteHtml  = tx.note ? `<div class="tx-note-box">${ic('chat','ms-20')}<span class="tx-note-text">${esc(tx.note)}</span></div>` : '';
-  const photoUrl  = /^https?:\/\//i.test(String(tx.photoUrl || '')) ? String(tx.photoUrl) : '';   /* tolak javascript:/data: */
-  const photoHtml = photoUrl ? `<a class="tx-photo-chip" href="${esc(photoUrl)}" target="_blank" rel="noopener" aria-label="Foto invoice">${ic('photo_camera','ms-18')}Foto</a>` : '';
+  const photos    = txPhotos(tx);
+  const photoHtml = photos.length ? '<span class="tx-thumbs">' + photos.map((u, i) => {
+    const th = driveThumb(u), lbl = 'Foto invoice' + (photos.length > 1 ? ' ' + (i + 1) : '');
+    return `<a class="tx-thumb" href="${esc(u)}" target="_blank" rel="noopener" aria-label="${lbl}">${th ? `<img src="${esc(th)}" alt="" loading="lazy" decoding="async">` : ic('photo_camera','ms-20')}</a>`;
+  }).join('') + '</span>' : '';
   const stamp = tx.editedAt
     ? `diedit ${esc(formatDicatat(tx.editedAt))}`
     : `dicatat ${esc(formatDicatat(tx.timestamp))}`;
@@ -469,6 +481,7 @@ function buildTxItem(tx, colorClass, mine) {
     </div>
     ${noteHtml}
     <div class="tx-row3"><span class="tx-sisa">${stamp}</span>${photoHtml}</div>`;
+  div.querySelectorAll('.tx-thumb img').forEach(img => img.addEventListener('error', () => { img.parentNode.innerHTML = ic('photo_camera','ms-20'); }, { once: true }));   /* thumbnail gagal dimuat (mis. berkas tidak dibagikan) → ikon */
   setupLongPress(div, tx);
   const moreBtn = div.querySelector('.tx-more');
   if (moreBtn) {
@@ -1453,7 +1466,7 @@ function handleSubmitTap() {
   setActivity();
   if (S.submitState==='submitting') return;   /* cegah klik berulang selama proses */
   if (!Number.isInteger(S.qty)||S.qty<1) { fx('warn'); toast('Jumlah harus lebih dari 0.','err'); return; }
-  if (S.mode==='DATANG'&&!S.photoDataUrl) { fx('warn'); toast('Foto invoice belum diambil.','err'); return; }
+  if (S.mode==='DATANG'&&!S.photos.length) { fx('warn'); toast('Foto invoice belum diambil.','err'); return; }
   const w = readTxWhen();
   if (w.error) { fx('warn'); toast(w.error,'err'); return; }
 
@@ -1466,24 +1479,35 @@ function handleSubmitTap() {
 /* ── MODE ────────────────────── */
 function setMode(mode) {
   if (S.submitState==='submitting') return;   /* jangan ganti mode saat penyimpanan berjalan */
-  S.mode=mode; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
+  S.mode=mode; clearPhotos();
   E.modeAmbilBtn.classList.toggle('active', mode!=='DATANG');
   E.modeDatangBtn.classList.toggle('active', mode==='DATANG');
   E.photoSection.classList.toggle('hidden', mode!=='DATANG');
   S.qty=0; E.qtyInput.value=0; resetTxWhen(); setSubmitState('idle'); setActivity();
 }
 /* Pilih sumber foto invoice: dialog di tengah layar dengan latar blur (seperti referensi). */
-function openPhotoPicker()  { E.pickerModal.classList.remove('hidden'); }
+function openPhotoPicker(slot) {
+  S.photoTarget = slot || 0;
+  $('pickerTitle').textContent = S.photoTarget ? 'Pilih Sumber Foto Invoice ke-2' : 'Pilih Sumber Foto Invoice';
+  E.pickerModal.classList.remove('hidden');
+}
 function closePhotoPicker() { E.pickerModal.classList.add('hidden'); }
+function clearPhotos() { S.photos = []; E.photoInputCamera.value = ''; E.photoInputGallery.value = ''; renderPhotoThumb(); }
+/* Dua slot: slot pertama selalu tampil; slot ke-2 muncul setelah foto pertama ada (opsional). Hapus foto pertama → foto ke-2 naik. */
 function renderPhotoThumb() {
-  if (!S.photoDataUrl) {
-    E.photoThumb.innerHTML=ic('receipt_long','ms-28')+'<span>Tap untuk pilih foto invoice — dari kamera atau galeri</span>';
-    E.photoThumb.classList.remove('has-photo');
-    E.photoRemoveBtn.classList.add('hidden');
-  } else {
-    E.photoThumb.innerHTML=`<img src="${S.photoDataUrl}" alt="Invoice">`;
-    E.photoThumb.classList.add('has-photo');
-    E.photoRemoveBtn.classList.remove('hidden');
+  const ph = S.photos;
+  E.photoGrid.classList.toggle('two', ph.length >= 1);
+  for (let k = 0; k < 2; k++) {
+    const thumb = E.photoThumbs[k], rm = E.photoRemoves[k], has = !!ph[k];
+    E.photoBoxes[k].classList.toggle('hidden', k > ph.length);
+    if (has) {
+      thumb.innerHTML = `<img src="${ph[k].dataUrl}" alt="Invoice ${k + 1}">`;
+      thumb.classList.add('has-photo'); rm.classList.remove('hidden');
+    } else {
+      thumb.innerHTML = k === 0 ? ic('receipt_long','ms-28') + '<span>Tap untuk pilih foto invoice — dari kamera atau galeri</span>'
+                                : ic('add','ms-28') + '<span>Foto ke-2 (opsional)</span>';
+      thumb.classList.remove('has-photo'); rm.classList.add('hidden');
+    }
   }
 }
 
@@ -1560,7 +1584,7 @@ function doLogout(fromIdle=false) {
   if(fromIdle) saveDraft();   /* sesi habis mendadak: jangan hilangkan isian */
   if(S.token) google.script.run.logout(S.token);
   clearCache(); clearAuth();
-  Object.assign(S,{token:null,user:null,expiresAt:0,stock:0,recent:[],month:{masuk:0,keluar:0},monthLabel:'—',qty:1,photoDataUrl:'',photoName:'',pendingDelete:null,ann:[],syncing:false,syncError:false,lastSync:0,flash:''});
+  Object.assign(S,{token:null,user:null,expiresAt:0,stock:0,recent:[],month:{masuk:0,keluar:0},monthLabel:'—',qty:1,photos:[],pendingDelete:null,ann:[],syncing:false,syncError:false,lastSync:0,flash:''});
   showView('login'); E.codeInput.value=''; setLoginError('');
   if(fromIdle) toast('Sesi berakhir. Silakan masuk lagi.');
 }
@@ -1628,22 +1652,23 @@ function clearFlashLater() {
 
 /* ── SAVE TX ─────────────────── */
 function doSaveTransaction() {
-  const mode = S.mode, qty = S.qty;
+  const mode = S.mode, qty = S.qty, photosSent = mode==='DATANG' ? S.photos.length : 0;
   google.script.run
     .withSuccessHandler(res=>{
       submitProgressEnd(!!(res&&res.ok), ()=>{
         setSubmitState('idle');   /* tombol kembali normal, berhasil maupun gagal */
         if(res&&res.message==='SESSION_EXPIRED'){onSessionExpired();return;}
         if(!res||!res.ok){fx('fail');toast('Gagal menyimpan: '+((res&&res.message)||'tidak ada respons dari server.'),'err',4500);return;}
-        E.noteInput.value=''; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
+        E.noteInput.value=''; clearPhotos();
         S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater(); fx('success');
         const sisa = Number(res.stock);
         toast(`${mode==='AMBIL'?'Ambil':'Galon datang'} ${qty} galon tersimpan. Sisa stok: ${sisa}${sisa<0?' (minus, cek pencatatan)':''}.`,'ok',4000);
+        if(photosSent===2&&res.photos!==2) toast('Server belum diperbarui: hanya foto pertama yang tersimpan. Terapkan Logic.gs terbaru.','err',7000);   /* backend lama mengabaikan foto ke-2 */
         setActivity();
       });
     })
     .withFailureHandler(err=>{ submitProgressEnd(false, ()=>{ setSubmitState('idle'); fx('fail'); toast('Gagal menyimpan: '+((err&&err.message)||'koneksi bermasalah.'),'err',4500); }); })
-    .saveTransaction({token:S.token,type:mode,qty:qty,note:E.noteInput.value.trim(),photoDataUrl:mode==='DATANG'?S.photoDataUrl:'',photoName:S.photoName,txDate:S.txCustom?E.txDateInput.value:'',txTime:S.txCustom?E.txTimeInput.value:''});
+    .saveTransaction({token:S.token,type:mode,qty:qty,note:E.noteInput.value.trim(),photoDataUrl:mode==='DATANG'&&S.photos[0]?S.photos[0].dataUrl:'',photoName:S.photos[0]?S.photos[0].name:'',photoDataUrl2:mode==='DATANG'&&S.photos[1]?S.photos[1].dataUrl:'',photoName2:S.photos[1]?S.photos[1].name:'',txDate:S.txCustom?E.txDateInput.value:'',txTime:S.txCustom?E.txTimeInput.value:''});
 }
 
 /* ── IMAGE COMPRESS ──────────── */
@@ -1824,22 +1849,22 @@ function bindEvents() {
   E.qtyInput.addEventListener('blur',  ()=>{ E.qtyInput.value=S.qty; });
 
   async function handlePhotoFile(ev) {
-    const file=ev.target.files&&ev.target.files[0]; if(!file) return;
+    const input = ev.target, file = input.files && input.files[0]; if (!file) return;
+    const slot = Math.min(S.photoTarget || 0, S.photos.length, 1);   /* 0 = foto pertama; 1 = foto ke-2 (hanya bila foto pertama sudah ada) */
     setActivity(); toast('Mengompres foto…');
-    try { S.photoDataUrl=await compressImage(file); S.photoName=file.name||'invoice.jpg'; renderPhotoThumb(); toast('Foto siap.','ok'); }
-    catch(err){ toast(err.message||'Gagal memproses foto.','err'); S.photoDataUrl=''; S.photoName=''; renderPhotoThumb(); }
+    try { const dataUrl = await compressImage(file); S.photos[slot] = { dataUrl, name: file.name || 'invoice.jpg' }; renderPhotoThumb(); toast(slot ? 'Foto ke-2 siap.' : 'Foto siap.','ok'); }
+    catch(err){ toast(err.message||'Gagal memproses foto.','err'); renderPhotoThumb(); }
+    input.value = '';   /* memilih berkas yang sama lagi tetap memicu event */
   }
   E.photoInputCamera.addEventListener('change', handlePhotoFile);
   E.photoInputGallery.addEventListener('change', handlePhotoFile);
-  E.photoThumb.addEventListener('click', ()=>{ if (S.submitState==='submitting') return; setActivity(); openPhotoPicker(); });
+  E.photoThumbs.forEach((b, k) => b.addEventListener('click', ()=>{ if (S.submitState==='submitting') return; setActivity(); openPhotoPicker(k); }));
   E.photoCameraBtn.addEventListener('click', ()=>{ setActivity(); closePhotoPicker(); E.photoInputCamera.click(); });
   E.photoGalleryBtn.addEventListener('click', ()=>{ setActivity(); closePhotoPicker(); E.photoInputGallery.click(); });
   E.photoPickerCancelBtn.addEventListener('click', closePhotoPicker);
   E.pickerModal.addEventListener('click', ev=>{ if(ev.target===E.pickerModal) closePhotoPicker(); });
   E.resetFormBtn.addEventListener('click', doResetForm);
-  E.photoRemoveBtn.addEventListener('click', ()=>{
-    S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb(); setActivity();
-  });
+  E.photoRemoves.forEach((b, k) => b.addEventListener('click', ()=>{ S.photos.splice(k, 1); E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb(); setActivity(); }));
 
   E.submitBtn.addEventListener('click', handleSubmitTap);
 

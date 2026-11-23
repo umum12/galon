@@ -145,10 +145,17 @@
         </div>
       </div>
       <div class="hidden" id="photoSection">
-        <div class="photo-box">
-          <button type="button" class="photo-thumb" id="photoThumb" aria-haspopup="dialog"><span class="ms ms-28" aria-hidden="true">receipt_long</span><span>Tap untuk pilih foto invoice — dari kamera atau galeri</span></button>
-          <button type="button" class="photo-remove hidden" id="photoRemoveBtn" title="Hapus foto" aria-label="Hapus foto"><span class="ms ms-20" aria-hidden="true">close</span></button>
+        <div class="photo-grid" id="photoGrid">
+          <div class="photo-box" id="photoBox0">
+            <button type="button" class="photo-thumb" id="photoThumb0" aria-haspopup="dialog"><span class="ms ms-28" aria-hidden="true">receipt_long</span><span>Tap untuk pilih foto invoice — dari kamera atau galeri</span></button>
+            <button type="button" class="photo-remove hidden" id="photoRemove0" title="Hapus foto" aria-label="Hapus foto 1"><span class="ms ms-20" aria-hidden="true">close</span></button>
+          </div>
+          <div class="photo-box hidden" id="photoBox1">
+            <button type="button" class="photo-thumb" id="photoThumb1" aria-haspopup="dialog"><span class="ms ms-28" aria-hidden="true">add</span><span>Foto ke-2 (opsional)</span></button>
+            <button type="button" class="photo-remove hidden" id="photoRemove1" title="Hapus foto" aria-label="Hapus foto 2"><span class="ms ms-20" aria-hidden="true">close</span></button>
+          </div>
         </div>
+        <div class="photo-hint">Invoice boleh 1 atau 2 foto (foto ke-2 opsional)</div>
         <input type="file" id="photoInputCamera" accept="image/*" capture="environment">
         <input type="file" id="photoInputGallery" accept="image/*">
       </div>
