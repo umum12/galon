@@ -2,7 +2,6 @@
 /* ── CONSTANTS ───────────────── */
 const APP_NAME      = 'Galon App';   /* nama aplikasi TETAP (tidak ada pengaturan di UI; server tidak mengubahnya) */
 const CACHE_KEY     = 'galon_v2';
-const IDLE_MS       = 30 * 60 * 1000;
 const LONG_PRESS_MS = 500;
 const MAX_BACKDATE_DAYS = 14;  /* 2 minggu — harus sama dengan BACKDATE_MAX_DAYS di Code.gs */
 
@@ -22,7 +21,7 @@ const S = {
   recent: [], month: { masuk: 0, keluar: 0 }, monthLabel: '—',
   mode: 'AMBIL', qty: 0,
   photoDataUrl: '', photoName: '',
-  lastActivity: Date.now(), idleTimer: null,
+  lastActivity: Date.now(),
   submitState: 'idle',
   pendingDelete: null,
   pendingEdit: null,
@@ -247,9 +246,42 @@ function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch(_){} }
 /* ── SESSION ─────────────────── */
 let _actSaved = 0;
 function setActivity() { S.lastActivity = Date.now(); if (S.lastActivity - _actSaved > 2000) { _actSaved = S.lastActivity; saveCache(); } }   /* tulis localStorage maks. tiap 2 dtk */
-function startIdleWatcher() {
-  if (S.idleTimer) clearInterval(S.idleTimer);
-  S.idleTimer = setInterval(() => { if (S.token && Date.now()-S.lastActivity>IDLE_MS) doLogout(true); }, 15000);
+/* ── SESI PERSISTEN ─────────────────
+   Kode akses disimpan di perangkat sampai pengguna menekan Keluar. Saat aplikasi dibuka, dan kapan pun sesi server
+   habis, aplikasi masuk ulang diam-diam dengan kode itu (server sekaligus memeriksa kode masih dikenal & aktif). */
+const AUTH_KEY = 'galon_auth';
+function saveAuth(code) { try { localStorage.setItem(AUTH_KEY, JSON.stringify({ code: String(code) })); } catch (_) {} }
+function loadAuth()     { try { const o = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); return (o && o.code) ? o : null; } catch (_) { return null; } }
+function clearAuth()    { try { localStorage.removeItem(AUTH_KEY); } catch (_) {} }
+
+/* Masuk ulang memakai kode tersimpan. cb(ok, fatal, pesan): fatal = server MENOLAK kode (tidak dikenal / nonaktif); bukan fatal = koneksi gagal. */
+function silentLogin(code, cb) {
+  google.script.run
+    .withSuccessHandler(res => {
+      if (!res || !res.ok) { cb(false, true, (res && res.message) || 'Login gagal.'); return; }
+      S.token = res.token; S.user = res.user; S.expiresAt = res.expiresAt; S.lastActivity = Date.now();
+      applyData(res);   /* login membawa data dashboard; applyData juga menyimpan cache */
+      cb(true);
+    })
+    .withFailureHandler(err => cb(false, false, (err && err.message) || 'Koneksi gagal.'))
+    .login(code, S.deviceKey || '');
+}
+
+/* Dipanggil saat server menjawab SESSION_EXPIRED. Pulihkan sesi diam-diam; retry (opsional) dijalankan ulang HANYA untuk aksi baca.
+   Aksi tulis (kirim/edit/hapus) tidak diulang otomatis agar tidak tersimpan dua kali: pengguna cukup mengetuk lagi, isian tetap utuh. */
+let _recovering = false;
+function onSessionExpired(retry, quiet) {
+  const auth = loadAuth();
+  if (!auth) { doLogout(true); return; }   /* tanpa kode tersimpan: perilaku lama */
+  if (_recovering) return;
+  if (retry && S.retryAt && Date.now() - S.retryAt < 20000) { toast('Sesi tidak valid. Coba lagi sebentar lagi.', 'err'); return; }   /* cegah putaran tak berujung: ulang otomatis paling sering sekali per 20 detik */
+  _recovering = true;
+  silentLogin(auth.code, (ok, fatal, msg) => {
+    _recovering = false;
+    if (ok) { if (retry) { S.retryAt = Date.now(); retry(); } else if (!quiet) toast('Sesi diperbarui. Silakan ulangi.', 'ok'); return; }
+    if (fatal) { doLogout(true); setLoginError(msg); return; }
+    toast(msg, 'err');
+  });
 }
 
 /* ── VIEWS ───────────────────── */
@@ -502,6 +534,7 @@ function doDeleteTransaction() {
     .withSuccessHandler(res => {
       E.confirmDeleteBtn.disabled=false; E.confirmDeleteBtn.innerHTML=ic('delete','ms-20')+'Hapus Transaksi';
       closeDeleteModal();
+      if (res && res.message==='SESSION_EXPIRED') { onSessionExpired(); return; }
       if (!res||!res.ok) { toast((res&&res.message)||'Gagal menghapus.','err'); return; }
       applyData(res); toast(res.message||'Transaksi dihapus.','ok'); setActivity();
       if (isHistoryOpen()) fetchFullHistory(true);
@@ -577,7 +610,7 @@ function doEditTransaction() {
     .withSuccessHandler(res => {
       reset();
       if (!res || !res.ok) {
-        if (res && res.message==='SESSION_EXPIRED') { closeEditModal(); doLogout(true); return; }
+        if (res && res.message==='SESSION_EXPIRED') { onSessionExpired(); return; }
         toast((res&&res.message)||'Gagal menyimpan.','err'); return;
       }
       flashTx(`${tx.timestamp}|${tx.kode}`); closeEditModal(); applyData(res); clearFlashLater(); toast(res.message||'Transaksi diperbarui.','ok'); setActivity();
@@ -831,7 +864,7 @@ function loadReport() {
       if (seq !== MT.seq) return;   /* jawaban basi */
       MT.loading = false;
       if (!res || !res.ok) {
-        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
+        if (res && res.message === 'SESSION_EXPIRED') { onSessionExpired(() => loadReport()); return; }
         MT.error = (res && res.message) || 'Gagal memuat laporan.'; applyView(); toast(MT.error, 'err'); return;
       }
       try { setStatsFromResponse(res); } catch (e) { MT.error = reportError(e, 'Respons laporan tidak valid.'); applyView(); toast(e.outdated ? 'Server belum diperbarui.' : MT.error, 'err'); return; }
@@ -886,7 +919,7 @@ function doRefreshStats(btn) {
     .withSuccessHandler(res => {
       if (seq !== MT.seq) return;
       if (!res || !res.ok) {
-        if (res && res.message === 'SESSION_EXPIRED') { closeMonthlyTable(); doLogout(true); return; }
+        if (res && res.message === 'SESSION_EXPIRED') { onSessionExpired(); renderMeta(); return; }
         toast((res && res.message) || 'Gagal memperbarui.', 'err'); renderMeta(); return;
       }
       try { setStatsFromResponse(res); } catch (e) { toast(e.outdated ? 'Server belum diperbarui.' : 'Respons laporan tidak valid.', 'err'); renderMeta(); return; }
@@ -1196,7 +1229,7 @@ function fetchFullHistory(keepScroll) {
       HIST.loading = false;
       E.historyLoading.classList.add('hidden');
       if (!res || !res.ok) {
-        if (res && res.message === 'SESSION_EXPIRED') { closeHistory(); doLogout(true); return; }
+        if (res && res.message === 'SESSION_EXPIRED') { onSessionExpired(() => fetchFullHistory(keepScroll)); return; }
         toast((res && res.message) || 'Gagal memuat riwayat.','err'); return;
       }
       HIST.items = res.items || [];
@@ -1390,11 +1423,10 @@ function doLogin() {
     .withSuccessHandler(res=>{
       E.loginBtn.disabled=false;
       if(!res||!res.ok){Splash.cancel();setLoginError((res&&res.message)||'Login gagal.');return;}
-      S.token=res.token; S.user=res.user; S.expiresAt=res.expiresAt; S.lastActivity=Date.now(); saveCache();
+      S.token=res.token; S.user=res.user; S.expiresAt=res.expiresAt; S.lastActivity=Date.now(); saveCache(); saveAuth(code);
       if (res.deviceKey) { S.deviceKey = res.deviceKey; try { localStorage.setItem('galon_dev', res.deviceKey); } catch (_) {} }
       showView('main'); setMode('AMBIL');
       if (res.stock !== undefined) applyData(res); else loadDashboard(false);   /* login sudah membawa data dashboard */
-      startIdleWatcher();
       Splash.finish();   /* bilah penuh lalu splash memudar, menu utama sudah siap di belakangnya */
       toast(`Masuk sebagai ${res.user.kode}`,'ok');
       restoreDraft();
@@ -1406,9 +1438,8 @@ function setLoginError(msg) { E.loginError.textContent=msg; E.loginError.classLi
 function doLogout(fromIdle=false) {
   if(fromIdle) saveDraft();   /* sesi habis mendadak: jangan hilangkan isian */
   if(S.token) google.script.run.logout(S.token);
-  clearCache();
+  clearCache(); clearAuth();
   Object.assign(S,{token:null,user:null,expiresAt:0,stock:0,recent:[],month:{masuk:0,keluar:0},monthLabel:'—',qty:1,photoDataUrl:'',photoName:'',pendingDelete:null,ann:[],syncing:false,syncError:false,lastSync:0,flash:''});
-  if(S.idleTimer){clearInterval(S.idleTimer);S.idleTimer=null;}
   showView('login'); E.codeInput.value=''; setLoginError('');
   if(fromIdle) toast('Sesi berakhir. Silakan masuk lagi.');
 }
@@ -1423,7 +1454,7 @@ function loadDashboard(silent=false) {
       S.syncing = false;
       if(!silent){E.refreshBtn.classList.remove('spinning');E.refreshBtn.disabled=false;}
       if(!res||!res.ok){
-        if(res&&res.message==='SESSION_EXPIRED'){doLogout(true);return;}
+        if(res&&res.message==='SESSION_EXPIRED'){onSessionExpired(null,true);return;}
         S.syncError = true; renderSync();
         if(!silent)toast((res&&res.message)||'Gagal memuat.','err');
         return;
@@ -1454,7 +1485,6 @@ function renderSync() {
 /* Aplikasi kembali tampil (buka HP / pindah dari aplikasi lain): segarkan diam-diam bila data >30 detik. */
 function maybeAutoRefresh() {
   if (!S.token || S.syncing) return;
-  if (Date.now() - S.lastActivity > IDLE_MS) { doLogout(true); return; }
   if (Date.now() - S.lastSync < AUTO_REFRESH_MIN_MS) return;
   loadDashboard(true);
 }
@@ -1482,7 +1512,7 @@ function doSaveTransaction() {
     .withSuccessHandler(res=>{
       submitProgressEnd(!!(res&&res.ok), ()=>{
         setSubmitState('idle');   /* tombol kembali normal, berhasil maupun gagal */
-        if(res&&res.message==='SESSION_EXPIRED'){doLogout(true);return;}
+        if(res&&res.message==='SESSION_EXPIRED'){onSessionExpired();return;}
         if(!res||!res.ok){toast('Gagal menyimpan: '+((res&&res.message)||'tidak ada respons dari server.'),'err',4500);return;}
         E.noteInput.value=''; S.photoDataUrl=''; S.photoName=''; E.photoInputCamera.value=''; E.photoInputGallery.value=''; renderPhotoThumb();
         S.qty=0; E.qtyInput.value=0; resetTxWhen(); flashTx(newestOwnTxKey(res.recent)); applyData(res); clearFlashLater();
@@ -1535,6 +1565,7 @@ function doCorrectStock() {
   google.script.run
     .withSuccessHandler(res=>{
       E.correctStockBtn.disabled=false; E.correctStockBtn.textContent='Simpan Koreksi';
+      if(res&&res.message==='SESSION_EXPIRED'){onSessionExpired();return;}
       if(!res||!res.ok){toast((res&&res.message)||'Gagal.','err');return;}
       applyData(res); toast(res.message||'Koreksi tersimpan.','ok');
       E.correctStockInput.value=''; E.correctNoteInput.value=''; closeAdmin();
@@ -1549,6 +1580,7 @@ function runReloadCache(btn, label, fnName) {
   google.script.run
     .withSuccessHandler(res=>{
       btn.disabled=false; btn.innerHTML=original;
+      if(res&&res.message==='SESSION_EXPIRED'){onSessionExpired();return;}
       if(!res||!res.ok){toast((res&&res.message)||'Gagal memuat ulang.','err');return;}
       applyData(res); toast(res.message||`${label} dimuat ulang.`,'ok');
     })
@@ -1606,7 +1638,7 @@ function doSaveRunningText() {
     .withSuccessHandler(res => {
       done();
       if (!res || !res.ok) {
-        if (res && res.message === 'SESSION_EXPIRED') { closeAdmin(); doLogout(true); return; }
+        if (res && res.message === 'SESSION_EXPIRED') { onSessionExpired(); return; }
         toast((res && res.message) || 'Gagal menyimpan.','err'); return;
       }
       applyData(res); A.pesan.value = currentRunningText();
@@ -1625,7 +1657,7 @@ function doDeleteRunningText() {
       .withSuccessHandler(res => {
         done();
         if (!res || !res.ok) {
-          if (res && res.message === 'SESSION_EXPIRED') { closeAdmin(); doLogout(true); return; }
+          if (res && res.message === 'SESSION_EXPIRED') { onSessionExpired(); return; }
           toast((res && res.message) || 'Gagal menghapus.','err'); return;
         }
         applyData(res); A.pesan.value = '';
@@ -1783,20 +1815,32 @@ function init() {
   bindEvents();
   bindKeyboardAwareScroll();
   updateClock();
-  const cache = loadCache();
-  if (!cache||!cache.token||Date.now()-(cache.lastActivity||0)>IDLE_MS) {   /* sesi geser: kedaluwarsa bila tak aktif 30 menit (server memperpanjang tiap panggilan) */
+  const cache = loadCache(), auth = loadAuth();
+  if (!auth && (!cache || !cache.token)) {   /* belum pernah masuk / sudah Keluar */
     clearCache(); showView('login'); setTimeout(()=>E.codeInput.focus(),80); Splash.finish(true); return;
   }
-  Object.assign(S, {
+  if (cache && cache.token) Object.assign(S, {
     token:cache.token, user:cache.user, expiresAt:cache.expiresAt,
     lastActivity:cache.lastActivity||Date.now(),
     stock:cache.stock||0, warning:cache.warning||20, danger:cache.danger||10,
     status:cache.status||'safe',
     recent:cache.recent||[], month:cache.month||{masuk:0,keluar:0}, monthLabel:cache.monthLabel||'—', ann:cache.ann||[], lastSync:cache.lastSync||0, skewMs:cache.skewMs||0,
   });
-  showView('main'); setMode('AMBIL');
-  renderStock(false); renderRecent(); renderAnnouncements(); startIdleWatcher();
-  Splash.finish(true);
-  loadDashboard(true);
+  const showCached = () => { showView('main'); setMode('AMBIL'); renderStock(false); renderRecent(); renderAnnouncements(); };
+
+  if (!auth) {   /* sesi lama tanpa kode tersimpan (login sebelum pembaruan): pakai token yang ada; kode tersimpan saat login berikutnya */
+    showCached(); Splash.finish(true); loadDashboard(true); return;
+  }
+  /* Ada kode tersimpan: hubungkan ke server dan periksa kode akses sebelum masuk. */
+  Splash.show('Menghubungkan ke server…', [[1600,'Memverifikasi kode akses…'],[6000,'Masih memuat, mohon tunggu…']]);
+  silentLogin(auth.code, (ok, fatal, msg) => {
+    if (ok) { showView('main'); setMode('AMBIL'); renderStock(false); renderRecent(); renderAnnouncements(); renderSync(); Splash.finish(); return; }
+    if (fatal) { clearAuth(); clearCache(); showView('login'); setLoginError(msg); Splash.finish(true); return; }   /* kode ditolak server */
+    if (cache && cache.token) {   /* koneksi gagal: tampilkan data terakhir agar tetap bisa dilihat */
+      showCached(); S.syncError = true; renderSync(); Splash.finish(true);
+      toast('Tidak bisa terhubung ke server. Menampilkan data terakhir.', 'err', 4500); return;
+    }
+    showView('login'); setLoginError(msg); Splash.finish(true);
+  });
 }
 init();
