@@ -98,7 +98,8 @@ const E = {
   txList: $('txList'), pickerModal: $('pickerModal'), photoPickerCancelBtn: $('photoPickerCancelBtn'),
   historyModal: $('historyModal'), historyCloseBtn: $('historyCloseBtn'), historySub: $('historySub'),
   historyScroll: $('historyScroll'), historyLoading: $('historyLoading'),
-  historyList: $('historyList'), historyEmpty: $('historyEmpty'),
+  historyList: $('historyList'), historyEmpty: $('historyEmpty'), historyMore: $('historyMore'), historyFilters: $('historyFilters'),
+  hfMonth: $('hfMonth'), hfYear: $('hfYear'), hfDateBtn: $('hfDateBtn'), hfDateLabel: $('hfDateLabel'), hfDateEdit: $('hfDateEdit'), hfDateInput: $('hfDateInput'), hfDateClear: $('hfDateClear'),
   adminModal: $('adminModal'),
   correctStockInput: $('correctStockInput'), correctNoteInput: $('correctNoteInput'),
   correctStockBtn: $('correctStockBtn'),
@@ -1245,16 +1246,43 @@ function exportMonthlyPdf() {
 window.addEventListener('afterprint', () => document.body.classList.remove('mt-printing'));
 
 /* ███ 4. RIWAYAT LENGKAP & RIWAYAT SAYA ███ */
-/* ── RIWAYAT LENGKAP & RIWAYAT SAYA (2 minggu, edit/hapus lewat tekan & tahan) ──
-   Satu modal, dua mode: mine=false → semua orang; mine=true → hanya milik pengguna (disaring di server). */
-const HIST = { loading: false, items: [], days: 14, mine: false, seq: 0 };   /* seq: hanya jawaban permintaan TERAKHIR yang dipakai */
+/* ── RIWAYAT LENGKAP & RIWAYAT SAYA — dibaca PER BULAN (dropdown bulan + tahun), edit/hapus lewat ⋯ atau tekan & tahan ──
+   Satu modal, dua mode: mine=false → semua orang; mine=true → hanya milik pengguna (disaring di server).
+   Server mengirim satu bulan penuh; filter jenis (Semua/Ambil/Datang) dan pencarian tanggal dikerjakan di klien tanpa panggilan baru. */
+const HIST_PAGE = 100;   /* kartu yang digambar sekaligus; sisanya lewat tombol "Tampilkan lagi" (menjaga performa HP) */
+const HIST = { loading: false, items: [], mine: false, seq: 0, year: 0, month: 0, type: 'ALL', date: '', shown: HIST_PAGE };   /* seq: hanya jawaban permintaan TERAKHIR yang dipakai */
+const HIST_OUTDATED_MSG = 'Server belum diperbarui (riwayat per bulan belum tersedia). Terapkan Logic.gs terbaru lalu buat versi baru pada deployment.';
 
 function isHistoryOpen() { return !E.historyModal.classList.contains('hidden'); }
+
+/* Tahun: dari MT_YEAR_MIN sampai tahun berjalan (otomatis bertambah tiap tahun), terbaru di atas. */
+function buildHistorySelects() {
+  const maxY = Math.max(nowS().getFullYear(), MT_YEAR_MIN);
+  if (!E.hfMonth.options.length) for (let m = 1; m <= 12; m++) E.hfMonth.add(new Option(BULAN_ID[m], m));
+  E.hfYear.innerHTML = '';
+  for (let y = maxY; y >= MT_YEAR_MIN; y--) E.hfYear.add(new Option(y, y));
+  E.hfDateInput.min = `${MT_YEAR_MIN}-01-01`; E.hfDateInput.max = toISODate(nowS());
+}
+/* Samakan tampilan kontrol dengan state HIST. */
+function syncHistoryFilters() {
+  E.hfMonth.value = String(HIST.month); E.hfYear.value = String(HIST.year);
+  E.historyFilters.querySelectorAll('.hf-chip[data-type]').forEach(b => {
+    const on = b.dataset.type === HIST.type;
+    b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const d = HIST.date;
+  E.hfDateLabel.textContent = d ? `${d.substring(8, 10)} ${BULAN_SHORT_ID[Number(d.substring(5, 7))]}` : 'Tanggal';
+  E.hfDateBtn.classList.toggle('active', !!d);
+  E.hfDateInput.value = d;
+}
 
 function openHistory(mine) {
   setActivity();
   HIST.mine = mine === true;
   HIST.items = [];
+  const now = nowS();
+  HIST.year = now.getFullYear(); HIST.month = now.getMonth() + 1; HIST.type = 'ALL'; HIST.date = ''; HIST.shown = HIST_PAGE;   /* selalu mulai dari bulan ini, tanpa filter */
+  buildHistorySelects(); syncHistoryFilters(); E.hfDateEdit.classList.add('hidden');
   E.historyTitle.innerHTML = HIST.mine ? ic('person') + 'Riwayat Saya' : ic('history') + 'Riwayat Lengkap';
   E.historyScroll.scrollTop = 0;
   E.historyModal.classList.remove('hidden');
@@ -1263,26 +1291,59 @@ function openHistory(mine) {
 }
 function closeHistory() { E.historyModal.classList.add('hidden'); navReset(HIST.mine ? 'saya' : 'riwayat'); }
 
+/* Ganti bulan/tahun lewat dropdown → muat bulan itu. Filter tanggal dibuang bila tanggalnya di bulan lain. */
+function onHistoryMonthChange() {
+  HIST.month = parseInt(E.hfMonth.value, 10); HIST.year = parseInt(E.hfYear.value, 10);
+  if (HIST.date && HIST.date.substring(0, 7) !== `${HIST.year}-${pad2(HIST.month)}`) HIST.date = '';
+  HIST.shown = HIST_PAGE; syncHistoryFilters(); E.historyScroll.scrollTop = 0; setActivity();
+  fetchFullHistory(false);
+}
+function setHistoryType(type) {
+  HIST.type = type; HIST.shown = HIST_PAGE; syncHistoryFilters(); E.historyScroll.scrollTop = 0; setActivity();
+  renderHistory();
+}
+/* Cari tanggal tertentu: di bulan yang sedang dibuka → hanya menyaring; di bulan lain → pindah bulan lalu menyaring. */
+function onHistoryDate() {
+  const d = E.hfDateInput.value;
+  HIST.shown = HIST_PAGE; setActivity();
+  if (d) {
+    const y = Number(d.substring(0, 4)), m = Number(d.substring(5, 7));
+    if (![...E.hfYear.options].some(o => Number(o.value) === y)) { toast(`Tanggal di luar jangkauan (mulai ${MT_YEAR_MIN}).`, 'err'); E.hfDateInput.value = HIST.date; return; }
+    HIST.date = d;
+    if (y !== HIST.year || m !== HIST.month) { HIST.year = y; HIST.month = m; syncHistoryFilters(); E.historyScroll.scrollTop = 0; fetchFullHistory(false); return; }
+  } else HIST.date = '';
+  syncHistoryFilters(); E.historyScroll.scrollTop = 0; renderHistory();
+}
+function clearHistoryDate() {
+  HIST.date = ''; HIST.shown = HIST_PAGE; E.hfDateEdit.classList.add('hidden'); syncHistoryFilters(); setActivity(); renderHistory();
+}
+function toggleHistoryDateEdit() {
+  const open = E.hfDateEdit.classList.toggle('hidden') === false;
+  if (open) { try { E.hfDateInput.showPicker(); } catch (_) {} }
+  setActivity();
+}
+
 /* keepScroll=true: dipanggil setelah edit/hapus — daftar disegarkan tanpa loncat ke atas. */
 function fetchFullHistory(keepScroll) {
-  const seq = ++HIST.seq;
+  const seq = ++HIST.seq, y = HIST.year, m = HIST.month;
   HIST.loading = true;
   if (!keepScroll) {
     E.historyLoading.classList.remove('hidden');
     E.historyList.classList.add('hidden');
     E.historyEmpty.classList.add('hidden');
+    E.historyMore.classList.add('hidden');
   }
   google.script.run
     .withSuccessHandler(res => {
-      if (seq !== HIST.seq) return;   /* jawaban basi (mode/permintaan sudah berganti) */
+      if (seq !== HIST.seq) return;   /* jawaban basi (bulan/mode/permintaan sudah berganti) */
       HIST.loading = false;
       E.historyLoading.classList.add('hidden');
       if (!res || !res.ok) {
         if (res && res.message === 'SESSION_EXPIRED') { onSessionExpired(() => fetchFullHistory(keepScroll)); return; }
         toast((res && res.message) || 'Gagal memuat riwayat.','err'); return;
       }
+      if (res.year !== y || res.month !== m) { toast(HIST_OUTDATED_MSG, 'err', 6000); return; }   /* backend lama mengabaikan bulan */
       HIST.items = res.items || [];
-      HIST.days  = res.days || 14;
       renderHistory();
     })
     .withFailureHandler(err => {
@@ -1291,26 +1352,36 @@ function fetchFullHistory(keepScroll) {
       E.historyLoading.classList.add('hidden');
       toast((err && err.message) || 'Gagal memuat riwayat.','err');
     })
-    .getTransactionHistory(S.token, HIST.mine);
+    .getTransactionHistory(S.token, HIST.mine, y, m);
 }
 
+/* Daftar yang tampil = data bulan terpilih disaring jenis + tanggal. */
+function filteredHistory() {
+  return HIST.items.filter(t => (HIST.type === 'ALL' || t.jenis === HIST.type) && (!HIST.date || String(t.date).substring(0, 10) === HIST.date));
+}
 function renderHistory() {
-  const items = HIST.items;
-  E.historySub.textContent = HIST.mine
-    ? `${HIST.days} hari terakhir · ${items.length} transaksi milik Anda · ketuk ⋯ untuk edit atau hapus`
-    : `${HIST.days} hari terakhir · ${items.length} transaksi · ketuk ⋯ untuk edit atau hapus`;
-  E.historyEmpty.textContent = HIST.mine
-    ? `Belum ada transaksi Anda dalam ${HIST.days} hari terakhir.`
-    : `Tidak ada transaksi dalam ${HIST.days} hari terakhir.`;
+  const all = HIST.items, items = filteredHistory(), label = `${BULAN_ID[HIST.month]} ${HIST.year}`;
+  let ambil = 0, datang = 0;
+  items.forEach(t => { if (t.jenis === 'AMBIL') ambil += t.qty; else if (t.jenis === 'DATANG') datang += t.qty; });
+  const sub = [label, `${items.length}${items.length !== all.length ? ' dari ' + all.length : ''} transaksi`];
+  if (ambil)  sub.push(`Ambil ${ambil}`);
+  if (datang) sub.push(`Datang ${datang}`);
+  if (HIST.mine) sub.push('milik Anda');
+  E.historySub.textContent = sub.join(' · ');
+  E.historyEmpty.textContent = all.length ? 'Tidak ada transaksi yang cocok dengan filter.'
+    : HIST.mine ? `Belum ada transaksi Anda pada ${label}.` : `Tidak ada transaksi pada ${label}.`;
   if (!items.length) {
     E.historyList.classList.add('hidden');
+    E.historyMore.classList.add('hidden');
     E.historyEmpty.classList.remove('hidden');
     return;
   }
   E.historyEmpty.classList.add('hidden');
-  const top = E.historyScroll.scrollTop;
-  renderTxList(E.historyList, items, HIST.mine);
+  const top = E.historyScroll.scrollTop, rest = items.length - HIST.shown;
+  renderTxList(E.historyList, items.slice(0, HIST.shown), HIST.mine);
   E.historyList.classList.remove('hidden');
+  E.historyMore.classList.toggle('hidden', rest <= 0);
+  if (rest > 0) E.historyMore.textContent = `Tampilkan lagi (sisa ${rest})`;
   E.historyScroll.scrollTop = top;
 }
 
@@ -1787,6 +1858,13 @@ function bindEvents() {
   /* Navbar bawah */
   Object.keys(NAV_MAP).forEach(k => E[NAV_MAP[k]].addEventListener('click', ()=>goNav(k)));
   E.historyCloseBtn.addEventListener('click', closeHistory);
+  E.hfMonth.addEventListener('change', onHistoryMonthChange);
+  E.hfYear.addEventListener('change', onHistoryMonthChange);
+  E.historyFilters.querySelectorAll('.hf-chip[data-type]').forEach(b => b.addEventListener('click', () => setHistoryType(b.dataset.type)));
+  E.hfDateBtn.addEventListener('click', toggleHistoryDateEdit);
+  E.hfDateInput.addEventListener('change', onHistoryDate);
+  E.hfDateClear.addEventListener('click', clearHistoryDate);
+  E.historyMore.addEventListener('click', () => { HIST.shown += HIST_PAGE; setActivity(); renderHistory(); });
   E.historyModal.addEventListener('click', ev=>{ if(ev.target===E.historyModal) closeHistory(); });
   E.mtPickerCloseBtn.addEventListener('click', closeMonthlyTable);
   E.mtRenderBtn.addEventListener('click', renderFromPicker);

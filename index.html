@@ -258,11 +258,30 @@
       <div class="mt-title" id="historyTitle">Riwayat Lengkap</div>
       <button class="mt-close" id="historyCloseBtn" aria-label="Tutup"><span class="ms" aria-hidden="true">close</span></button>
     </div>
-    <div class="history-sub" id="historySub">2 minggu terakhir · ketuk ⋯ untuk edit atau hapus</div>
+    <div class="hf" id="historyFilters">
+      <div class="hf-selects">
+        <label class="tf sel always"><select id="hfMonth"></select><span class="tf-label">Bulan</span></label>
+        <label class="tf sel always"><select id="hfYear"></select><span class="tf-label">Tahun</span></label>
+      </div>
+      <div class="hf-row">
+        <div class="hf-chips" role="group" aria-label="Filter jenis transaksi">
+          <button type="button" class="hf-chip active" data-type="ALL" aria-pressed="true">Semua</button>
+          <button type="button" class="hf-chip ambil" data-type="AMBIL" aria-pressed="false">Ambil</button>
+          <button type="button" class="hf-chip datang" data-type="DATANG" aria-pressed="false">Datang</button>
+        </div>
+        <button type="button" class="hf-chip hf-date" id="hfDateBtn" aria-label="Cari tanggal tertentu"><span class="ms ms-18" aria-hidden="true">calendar_today</span><span id="hfDateLabel">Tanggal</span></button>
+      </div>
+      <div class="hf-dateedit hidden" id="hfDateEdit">
+        <label class="tf always"><input id="hfDateInput" type="date"><span class="tf-label">Cari tanggal tertentu</span></label>
+        <button type="button" class="time-link" id="hfDateClear">Semua tanggal</button>
+      </div>
+    </div>
+    <div class="history-sub" id="historySub">Memuat…</div>
     <div class="history-scroll" id="historyScroll">
       <div class="mt-loading" id="historyLoading"><div class="lp lp-indeterminate"><span class="lp-bar"></span></div><span>Memuat data…</span></div>
       <div class="tx-list hidden" id="historyList"></div>
-      <div class="tx-empty hidden" id="historyEmpty">Tidak ada transaksi dalam 2 minggu terakhir.</div>
+      <div class="tx-empty hidden" id="historyEmpty">Tidak ada transaksi.</div>
+      <button type="button" class="btn btn-ghost btn-block hidden" id="historyMore"></button>
     </div>
   </div>
 </div>

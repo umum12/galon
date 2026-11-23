@@ -711,6 +711,23 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .mt-meta .st-meta { padding: 0; }
 .st-empty.err { margin: 16px; padding: 16px; text-align: left; line-height: 1.5; color: var(--md-on-error-container); background: var(--md-error-container); border: 1px solid #f5b8b2; border-radius: var(--r-lg); font-weight: 500; }
 
+/* 15i. RIWAYAT: FILTER BULAN/TAHUN, JENIS, TANGGAL ─── */
+.hf { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 8px; background: var(--md-surface-container-lowest); border-bottom: 1px solid var(--md-outline-variant); }
+.hf-selects { display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; }
+.hf-selects .tf, .hf-dateedit .tf { background: var(--md-surface-container-highest); border: 1px solid var(--md-outline-variant); }
+.hf-selects .tf select { font-weight: 700; }
+.hf-row { display: flex; align-items: center; gap: 8px; }
+.hf-chips { display: flex; flex: 1; min-width: 0; gap: 6px; }
+.hf-chip { appearance: none; flex: 0 0 auto; min-height: 40px; padding: 0 12px; border: 1px solid var(--md-outline-variant); border-radius: var(--r-full); background: var(--md-surface-container-lowest); color: var(--md-on-surface-variant); font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; touch-action: manipulation; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, color .15s, border-color .15s; }
+.hf-chips .hf-chip { flex: 1 1 0; padding: 0 6px; }
+.hf-chip:active { filter: brightness(.94); }
+.hf-chip.active { background: var(--md-primary-container); border-color: var(--md-primary); color: var(--md-on-primary-container); }
+.hf-chip.ambil.active { background: var(--md-error-container); border-color: #f5b8b2; color: var(--md-on-error-container); }
+.hf-chip.datang.active { background: var(--md-success-container); border-color: #a9dfb8; color: var(--md-on-success-container); }
+.hf-dateedit { display: flex; align-items: center; gap: 8px; }
+.hf-dateedit .tf { flex: 1; min-width: 0; }
+#historyMore { margin: 14px 0 6px; }
+
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
