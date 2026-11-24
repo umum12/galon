@@ -1439,11 +1439,12 @@ function buildInvoiceHtml(list, ok) {
     if (isD) {
       const us = txPhotos(t);
       if (!us.length) photos = '<div class="inv-nophoto">Tanpa foto invoice</div>';
-      else photos = `<div class="inv-photos${us.length === 1 ? ' one' : ''}">` + us.map((u, i) => {
+      else photos = '<div class="inv-photos">' + [0, 1].map(i => {   /* selalu TEPAT 2 frame: foto 1 di kiri, foto 2 di kanan; bila hanya 1 foto, frame kanan kosong (border tetap) */
+        const u = us[i];
+        if (!u) return '<figure class="inv-photo"><div class="inv-frame"></div><figcaption>&nbsp;</figcaption></figure>';
         const th = driveThumb(u, INV_PHOTO_W);
-        return (th && ok[th])
-          ? `<figure class="inv-photo"><img src="${esc(th)}" alt="Foto invoice ${i + 1}"><figcaption>Foto invoice ${us.length > 1 ? (i + 1) + '/' + us.length : ''}</figcaption></figure>`
-          : '<div class="inv-nophoto">Foto tidak dapat dimuat</div>';
+        const inner = (th && ok[th]) ? `<img src="${esc(th)}" alt="Foto invoice ${i + 1}">` : '<span class="inv-fail">Foto tidak dapat dimuat</span>';
+        return `<figure class="inv-photo"><div class="inv-frame">${inner}</div><figcaption>Foto ${i + 1}</figcaption></figure>`;
       }).join('') + '</div>';
     }
     return `<div class="inv-tx"><div class="inv-main">` +

@@ -744,7 +744,7 @@ button.photo-thumb:active { background: var(--md-surface-container); }
   @page { size: A4 portrait; margin: 12mm; }
   html.inv-printing, html.inv-printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
   html.inv-printing body > :not(#invoicePrint) { display: none !important; }
-  html.inv-printing #invoicePrint { display: block; color: #111; font: 11px/1.4 'Roboto', Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html.inv-printing #invoicePrint { --inv-frame: 55mm; display: block; color: #111; font: 11px/1.4 'Roboto', Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .inv-head { border-bottom: 0.5mm solid #1f3fae; padding-bottom: 3mm; margin-bottom: 4mm; }
   .inv-brand { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #555; }
   .inv-head h1 { font-size: 20px; line-height: 1.2; margin: 1mm 0 0; font-weight: 700; }
@@ -770,11 +770,13 @@ button.photo-thumb:active { background: var(--md-surface-container); }
   .inv-kind.datang { color: #006e2d; } .inv-kind.ambil { color: #ba1a1a; } .inv-kind.koreksi { color: #75546f; }
   .inv-c-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
   .inv-c-qty.plus { color: #006e2d; } .inv-c-qty.minus { color: #ba1a1a; }
-  .inv-photos { display: flex; flex-wrap: wrap; gap: 3mm; margin-top: 2mm; }
-  .inv-photo { margin: 0; }
-  .inv-photo img { display: block; max-width: 88mm; max-height: 115mm; object-fit: contain; border: 0.3mm solid #bbb; }
-  .inv-photos.one .inv-photo img { max-width: 130mm; max-height: 160mm; }
-  .inv-photo figcaption { font-size: 9px; color: #666; margin-top: 0.8mm; }
+  /* Foto invoice: 2 frame persegi 1:1 berukuran identik, berdampingan kiri-kanan, rata tengah halaman. Ukuran frame = --inv-frame (satu angka untuk disetel). */
+  .inv-photos { display: flex; justify-content: center; gap: 8mm; margin-top: 2.5mm; }
+  .inv-photo { margin: 0; width: var(--inv-frame); }
+  .inv-frame { box-sizing: border-box; width: var(--inv-frame); height: var(--inv-frame); padding: 1.2mm; border: 0.3mm solid #8a8a8a; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .inv-frame img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: 50% 50%; }   /* utuh, tanpa mulur/potong, tepat di tengah */
+  .inv-fail { font-size: 9px; color: #888; text-align: center; }
+  .inv-photo figcaption { font-size: 9px; color: #666; text-align: center; margin-top: 0.8mm; }
   .inv-nophoto { font-size: 10px; color: #888; font-style: italic; margin-top: 1mm; }
   .inv-foot { margin-top: 6mm; font-size: 9px; color: #777; text-align: center; }
 }
