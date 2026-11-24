@@ -263,6 +263,7 @@
   <div class="history-sheet">
     <div class="mt-header">
       <div class="mt-title" id="historyTitle">Riwayat Lengkap</div>
+      <button class="mt-nav" id="historyExportBtn" title="Export PDF" aria-label="Export PDF invoice bulanan"><span class="ms" aria-hidden="true">picture_as_pdf</span></button>
       <button class="mt-close" id="historyCloseBtn" aria-label="Tutup"><span class="ms" aria-hidden="true">close</span></button>
     </div>
     <div class="hf" id="historyFilters">
@@ -390,6 +391,9 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Dokumen cetak "Invoice Bulanan" (hanya terlihat saat mencetak / Simpan sebagai PDF) -->
+<div id="invoicePrint" aria-hidden="true"></div>
 
 <script src="config.js"></script>
 <script src="api.js"></script>

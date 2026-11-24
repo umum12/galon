@@ -738,6 +738,47 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .tx-thumb { width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; background: var(--md-surface-container); border: 1px solid var(--md-outline-variant); color: var(--md-on-surface-variant); }
 .tx-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
+/* 15k. EXPORT PDF INVOICE BULANAN — dokumen cetak (layar: tersembunyi) ─── */
+#invoicePrint { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  html.inv-printing, html.inv-printing body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  html.inv-printing body > :not(#invoicePrint) { display: none !important; }
+  html.inv-printing #invoicePrint { display: block; color: #111; font: 11px/1.4 'Roboto', Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .inv-head { border-bottom: 0.5mm solid #1f3fae; padding-bottom: 3mm; margin-bottom: 4mm; }
+  .inv-brand { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #555; }
+  .inv-head h1 { font-size: 20px; line-height: 1.2; margin: 1mm 0 0; font-weight: 700; }
+  .inv-period { font-size: 14px; font-weight: 700; color: #1f3fae; }
+  .inv-meta { font-size: 10px; color: #555; margin-top: 1mm; }
+  .inv-summary { display: flex; gap: 4mm; margin-bottom: 5mm; break-inside: avoid; page-break-inside: avoid; }
+  .inv-sum { flex: 1 1 0; border: 0.3mm solid #bbb; border-radius: 2mm; padding: 3mm 4mm; }
+  .inv-sum span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #555; }
+  .inv-sum b { display: block; font-size: 24px; line-height: 1.15; font-weight: 700; }
+  .inv-sum small { font-size: 10px; color: #555; }
+  .inv-sum.datang b { color: #006e2d; }
+  .inv-sum.ambil b { color: #ba1a1a; }
+  .inv-list h2 { font-size: 13px; margin: 0 0 2mm; font-weight: 700; }
+  .inv-list h2 small { font-size: 10px; font-weight: 400; color: #555; }
+  .inv-cols, .inv-main { display: flex; gap: 2mm; align-items: baseline; }
+  .inv-cols { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: #555; border-bottom: 0.3mm solid #999; padding-bottom: 1mm; }
+  .inv-c-date { flex: 0 0 38mm; }
+  .inv-c-kind { flex: 0 0 20mm; }
+  .inv-c-name { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+  .inv-c-qty  { flex: 0 0 20mm; text-align: right; }
+  .inv-tx { break-inside: avoid; page-break-inside: avoid; border-bottom: 0.2mm solid #ddd; padding: 1.6mm 0; }
+  .inv-kind { font-size: 10px; font-weight: 700; }
+  .inv-kind.datang { color: #006e2d; } .inv-kind.ambil { color: #ba1a1a; } .inv-kind.koreksi { color: #75546f; }
+  .inv-c-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .inv-c-qty.plus { color: #006e2d; } .inv-c-qty.minus { color: #ba1a1a; }
+  .inv-photos { display: flex; flex-wrap: wrap; gap: 3mm; margin-top: 2mm; }
+  .inv-photo { margin: 0; }
+  .inv-photo img { display: block; max-width: 88mm; max-height: 115mm; object-fit: contain; border: 0.3mm solid #bbb; }
+  .inv-photos.one .inv-photo img { max-width: 130mm; max-height: 160mm; }
+  .inv-photo figcaption { font-size: 9px; color: #666; margin-top: 0.8mm; }
+  .inv-nophoto { font-size: 10px; color: #888; font-style: italic; margin-top: 1mm; }
+  .inv-foot { margin-top: 6mm; font-size: 9px; color: #777; text-align: center; }
+}
+
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

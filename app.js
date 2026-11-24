@@ -95,7 +95,7 @@ const E = {
   navStatistik: $('navStatistik'), navSaya: $('navSaya'), navInput: $('navInput'), navRiwayat: $('navRiwayat'), navTabel: $('navTabel'),
   menuBtn: $('menuBtn'), scNama: $('scNama'), scRole: $('scRole'), scAvatar: $('scAvatar'), historyTitle: $('historyTitle'),
   txList: $('txList'), pickerModal: $('pickerModal'), photoPickerCancelBtn: $('photoPickerCancelBtn'),
-  historyModal: $('historyModal'), historyCloseBtn: $('historyCloseBtn'), historySub: $('historySub'),
+  historyModal: $('historyModal'), historyCloseBtn: $('historyCloseBtn'), historyExportBtn: $('historyExportBtn'), invoicePrint: $('invoicePrint'), historySub: $('historySub'),
   historyScroll: $('historyScroll'), historyLoading: $('historyLoading'),
   historyList: $('historyList'), historyEmpty: $('historyEmpty'), historyMore: $('historyMore'), historyFilters: $('historyFilters'),
   hfMonth: $('hfMonth'), hfYear: $('hfYear'), hfDateBtn: $('hfDateBtn'), hfDateLabel: $('hfDateLabel'), hfDateEdit: $('hfDateEdit'), hfDateInput: $('hfDateInput'), hfDateClear: $('hfDateClear'),
@@ -441,9 +441,9 @@ function txPhotos(tx) {
   return list.map(String).filter(u => /^https?:\/\//i.test(u)).slice(0, 2);
 }
 /* Alamat gambar kecil dari tautan Drive (butuh berkas dibagikan "siapa pun dengan tautan"); selain Drive → tanpa thumbnail. */
-function driveThumb(url) {
+function driveThumb(url, w) {
   const m = String(url).match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{10,})/) || String(url).match(/[?&]id=([A-Za-z0-9_-]{10,})/);
-  return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w200` : '';
+  return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w${w || 200}` : '';
 }
 function buildTxItem(tx, colorClass, mine) {
   const isAmbil=tx.jenis==='AMBIL', isKoreksi=tx.jenis==='KOREKSI';
@@ -1251,12 +1251,13 @@ async function saveBlobFile(blob, filename) {
 
 /* ── EXPORT: PDF (via dialog print bawaan browser) ───────────── */
 function exportMonthlyPdf() {
+  invCleanup();   /* jangan sampai dokumen invoice ikut tercetak */
   if (!MT.stats || !monthMatches(MT.stats.data)) { toast('Data belum siap.', 'err'); return; }
   document.body.classList.add('mt-printing');
   toast('Di dialog cetak, pilih "Simpan sebagai PDF".', '', 5000);
   window.print();
 }
-window.addEventListener('afterprint', () => document.body.classList.remove('mt-printing'));
+window.addEventListener('afterprint', () => { document.body.classList.remove('mt-printing'); invCleanup(); });
 
 /* ███ 4. RIWAYAT LENGKAP & RIWAYAT SAYA ███ */
 /* ── RIWAYAT LENGKAP & RIWAYAT SAYA — dibaca PER BULAN (dropdown bulan + tahun), edit/hapus lewat ⋯ atau tekan & tahan ──
@@ -1396,6 +1397,100 @@ function renderHistory() {
   E.historyMore.classList.toggle('hidden', rest <= 0);
   if (rest > 0) E.historyMore.textContent = `Tampilkan lagi (sisa ${rest})`;
   E.historyScroll.scrollTop = top;
+}
+
+/* ── EXPORT PDF INVOICE BULANAN (dari Riwayat) ───────────────────────────
+   Dokumen cetak dibangun dari bulan yang sedang dibuka di Riwayat, mengikuti filter yang aktif (jenis / tanggal):
+   daftar transaksi (tanggal-jam, jenis, nama, jumlah; foto invoice dirender untuk Datang) + ringkasan total Datang & Ambil bulan itu.
+   Pola sama dengan export Tabel: dialog cetak browser → "Simpan sebagai PDF". Foto dimuat dulu agar pasti ikut tercetak. */
+const INV_PHOTO_W = 1000;   /* lebar foto di PDF (px) */
+
+function invPreload(urls, ms) {
+  return Promise.all(urls.map(u => new Promise(res => {
+    const im = new Image(), to = setTimeout(() => res(false), ms);
+    im.onload  = () => { clearTimeout(to); res(true); };
+    im.onerror = () => { clearTimeout(to); res(false); };
+    im.src = u;
+  })));
+}
+/* Dipanggil setelah dialog cetak ditutup (afterprint) dan sebelum export lain. */
+function invCleanup() {
+  if (!document.documentElement.classList.contains('inv-printing')) return;
+  document.documentElement.classList.remove('inv-printing');
+  E.invoicePrint.innerHTML = '';
+  if (S.invTitle !== undefined) { document.title = S.invTitle; S.invTitle = undefined; }
+}
+function invDate(d) { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]} ${BULAN_SHORT_ID[Number(m[2])]} ${m[1]}` : '—'; }
+
+/* list: transaksi yang dicetak (lama → baru); ok: {alamatFoto: berhasilDimuat} */
+function buildInvoiceHtml(list, ok) {
+  const sum = { DATANG: { q: 0, n: 0 }, AMBIL: { q: 0, n: 0 } };
+  HIST.items.forEach(t => { if (sum[t.jenis]) { sum[t.jenis].q += Number(t.qty) || 0; sum[t.jenis].n++; } });   /* ringkasan = SELURUH bulan, bukan hanya yang difilter */
+  const period = `${BULAN_ID[HIST.month]} ${HIST.year}`, now = nowS();
+  const scope = [HIST.type === 'ALL' ? 'Semua transaksi' : HIST.type === 'AMBIL' ? 'Hanya Ambil' : 'Hanya Datang'];
+  if (HIST.date) scope.push('Tanggal ' + invDate(HIST.date));
+  const who = HIST.mine && S.user ? `Transaksi milik ${S.user.nama}` : 'Semua petugas';
+
+  const rows = list.map(t => {
+    const isA = t.jenis === 'AMBIL', isD = t.jenis === 'DATANG', q = Number(t.qty) || 0;
+    const cls = isD ? 'datang' : isA ? 'ambil' : 'koreksi', label = (TX_LABEL[t.jenis] || [t.jenis])[0];
+    const sign = isA ? '−' : isD ? '+' : (q > 0 ? '+' : q < 0 ? '−' : ''), qc = isA ? 'minus' : isD ? 'plus' : (q > 0 ? 'plus' : q < 0 ? 'minus' : '');
+    let photos = '';
+    if (isD) {
+      const us = txPhotos(t);
+      if (!us.length) photos = '<div class="inv-nophoto">Tanpa foto invoice</div>';
+      else photos = `<div class="inv-photos${us.length === 1 ? ' one' : ''}">` + us.map((u, i) => {
+        const th = driveThumb(u, INV_PHOTO_W);
+        return (th && ok[th])
+          ? `<figure class="inv-photo"><img src="${esc(th)}" alt="Foto invoice ${i + 1}"><figcaption>Foto invoice ${us.length > 1 ? (i + 1) + '/' + us.length : ''}</figcaption></figure>`
+          : '<div class="inv-nophoto">Foto tidak dapat dimuat</div>';
+      }).join('') + '</div>';
+    }
+    return `<div class="inv-tx"><div class="inv-main">` +
+      `<span class="inv-c-date">${esc(invDate(t.date))} · ${esc(String(t.time || '').substring(0, 5) || '—')}</span>` +
+      `<span class="inv-c-kind inv-kind ${cls}">${esc(label)}</span>` +
+      `<span class="inv-c-name">${esc(t.nama || t.kode)}</span>` +
+      `<span class="inv-c-qty ${qc}">${sign}${Math.abs(q)}</span></div>${photos}</div>`;
+  }).join('');
+
+  return '<div class="inv-doc">' +
+    `<header class="inv-head"><div class="inv-brand">${esc(APP_NAME)}</div><h1>Laporan Invoice Galon</h1><div class="inv-period">${esc(period)}</div>` +
+    `<div class="inv-meta">${esc(who)} · Daftar: ${esc(scope.join(' · '))}</div></header>` +
+    '<section class="inv-summary">' +
+      `<div class="inv-sum datang"><span>Total Datang</span><b>${sum.DATANG.q}</b><small>galon · ${sum.DATANG.n} transaksi</small></div>` +
+      `<div class="inv-sum ambil"><span>Total Ambil</span><b>${sum.AMBIL.q}</b><small>galon · ${sum.AMBIL.n} transaksi</small></div>` +
+    '</section>' +
+    `<section class="inv-list"><h2>Daftar Transaksi <small>(${list.length} transaksi)</small></h2>` +
+      '<div class="inv-cols"><span class="inv-c-date">Tanggal · Jam</span><span class="inv-c-kind">Jenis</span><span class="inv-c-name">Nama</span><span class="inv-c-qty">Jumlah</span></div>' +
+      rows + '</section>' +
+    `<footer class="inv-foot">Dicetak dari ${esc(APP_NAME)} · ${esc(invDate(toISODate(now)))} ${esc(toHHMM(now))}</footer></div>`;
+}
+
+async function exportInvoicePdf() {
+  if (S.exporting) return;
+  if (HIST.loading) { toast('Tunggu data selesai dimuat.'); return; }
+  const shown = filteredHistory();
+  if (!shown.length) { toast('Tidak ada transaksi untuk di-export.', 'err'); return; }
+  invCleanup(); setActivity();
+  S.exporting = true; E.historyExportBtn.disabled = true;
+  toast('Menyiapkan PDF…', '', 10000);
+  try {
+    const list = shown.slice().reverse();   /* lama → baru */
+    const urls = [];
+    list.forEach(t => { if (t.jenis === 'DATANG') txPhotos(t).forEach(u => { const th = driveThumb(u, INV_PHOTO_W); if (th && !urls.includes(th)) urls.push(th); }); });
+    const res = await invPreload(urls, 25000), ok = {};
+    urls.forEach((u, i) => { ok[u] = res[i]; });
+    E.invoicePrint.innerHTML = buildInvoiceHtml(list, ok);
+    const bad = res.filter(r => !r).length;
+    toast(bad ? `${bad} foto tidak dapat dimuat (periksa pembagian berkas di Drive). Di dialog cetak, pilih "Simpan sebagai PDF".`
+              : 'Di dialog cetak, pilih "Simpan sebagai PDF".', bad ? 'err' : '', 6000);
+    S.invTitle = document.title;
+    document.title = `Invoice Galon ${BULAN_ID[HIST.month]} ${HIST.year}`;   /* nama berkas PDF bawaan */
+    document.documentElement.classList.add('inv-printing');
+    window.print();
+  } finally {
+    S.exporting = false; E.historyExportBtn.disabled = false;
+  }
 }
 
 /* ███ 5. AKSI: submit, login, dashboard, simpan, admin, sinkron ███ */
@@ -1883,6 +1978,7 @@ function bindEvents() {
   /* Navbar bawah */
   Object.keys(NAV_MAP).forEach(k => E[NAV_MAP[k]].addEventListener('click', ()=>goNav(k)));
   E.historyCloseBtn.addEventListener('click', closeHistory);
+  E.historyExportBtn.addEventListener('click', exportInvoicePdf);
   E.hfMonth.addEventListener('change', onHistoryMonthChange);
   E.hfYear.addEventListener('change', onHistoryMonthChange);
   E.historyFilters.querySelectorAll('.hf-chip[data-type]').forEach(b => b.addEventListener('click', () => setHistoryType(b.dataset.type)));
