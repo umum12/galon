@@ -349,6 +349,34 @@
   </div>
 </div>
 
+<!-- PILIHAN EXPORT PDF (jenis transaksi + isi dokumen) -->
+<div id="exportModal" class="modal-backdrop center hidden" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+  <div class="modal-sheet center export-card">
+    <div class="sheet-title" id="exportTitle">Export PDF</div>
+    <div class="ex-group">
+      <div class="ex-cap">Jenis transaksi</div>
+      <div class="ex-chips" role="group" aria-label="Jenis transaksi">
+        <button type="button" class="hf-chip active" data-ex-type="ALL" aria-pressed="true">Semua</button>
+        <button type="button" class="hf-chip ambil" data-ex-type="AMBIL" aria-pressed="false">Ambil saja</button>
+        <button type="button" class="hf-chip datang" data-ex-type="DATANG" aria-pressed="false">Datang saja</button>
+      </div>
+    </div>
+    <div class="ex-group">
+      <div class="ex-cap">Isi dokumen</div>
+      <div class="ex-chips" role="group" aria-label="Isi dokumen">
+        <button type="button" class="hf-chip active" data-ex-mode="FULL" aria-pressed="true">Teks + foto</button>
+        <button type="button" class="hf-chip" data-ex-mode="TEXT" aria-pressed="false">Teks saja</button>
+        <button type="button" class="hf-chip" data-ex-mode="PHOTO" aria-pressed="false">Foto saja</button>
+      </div>
+    </div>
+    <div class="ex-note" id="exportNote">—</div>
+    <div class="dlg-actions">
+      <button class="btn btn-text" id="exportCancelBtn">Batal</button>
+      <button class="btn btn-primary" id="exportGoBtn"><span class="ms ms-20" aria-hidden="true">picture_as_pdf</span>Cetak PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- LAPORAN BULANAN -->
 <div id="monthlyModal" class="monthly-backdrop hidden">
   <div class="monthly-sheet">

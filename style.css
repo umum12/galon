@@ -781,6 +781,15 @@ button.photo-thumb:active { background: var(--md-surface-container); }
   .inv-foot { margin-top: 6mm; font-size: 9px; color: #777; text-align: center; }
 }
 
+/* 15l. DIALOG PILIHAN EXPORT PDF ─── */
+.export-card { max-width: min(92vw, 380px) !important; gap: 14px !important; }
+.ex-group { display: flex; flex-direction: column; gap: 6px; }
+.ex-chips { display: flex; gap: 6px; width: 100%; }
+.ex-chips .hf-chip { flex: 1 1 0; min-width: 0; padding: 0 6px; }
+.ex-cap { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--md-on-surface-variant); }
+.ex-note { min-height: 20px; font-size: 13px; font-weight: 500; color: var(--md-on-surface-variant); }
+.ex-note.err { color: var(--md-error); }
+
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
