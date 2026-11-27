@@ -421,7 +421,7 @@ button:disabled { cursor: not-allowed; }
 }
 .nav-ic { height: 32px; display: flex; align-items: center; justify-content: center; }
 .nav-ic .ms { font-size: 24px; }
-.nav-lbl { font-size: 10px; line-height: 1.15; font-weight: 700; text-align: center; letter-spacing: 0; }
+.nav-lbl { font-size: 11px; line-height: 1.15; font-weight: 700; text-align: center; letter-spacing: 0; white-space: nowrap; }
 .nav-item.active { color: var(--md-primary); }
 .nav-item.active .ms { font-variation-settings: 'FILL' 1; }
 .nav-input .nav-ic { width: 32px; height: 32px; margin: 0 auto; border-radius: 50%; background: var(--md-outline); color: #fff; box-shadow: var(--e1); transition: background .2s; }
@@ -706,7 +706,7 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .tb-user-text { display: none; flex-direction: column; line-height: 1.15; min-width: 0; }
 @media (min-width: 460px) { .tb-user { padding: 4px 12px 4px 4px; background: var(--md-surface-container-high); } .tb-user-text { display: flex; } }
 .tb-nama { font-size: 13px; font-weight: 500; max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-role { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--md-on-surface-variant); }
+.tb-role { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--md-on-surface-variant); }
 .mt-meta { flex-shrink: 0; padding: 8px 16px; background: var(--md-surface-container-low); border-bottom: 1px solid var(--md-surface-container-high); }
 .mt-meta .st-meta { padding: 0; }
 .st-empty.err { margin: 16px; padding: 16px; text-align: left; line-height: 1.5; color: var(--md-on-error-container); background: var(--md-error-container); border: 1px solid #f5b8b2; border-radius: var(--r-lg); font-weight: 500; }
@@ -789,6 +789,33 @@ button.photo-thumb:active { background: var(--md-surface-container); }
 .ex-cap { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--md-on-surface-variant); }
 .ex-note { min-height: 20px; font-size: 13px; font-weight: 500; color: var(--md-on-surface-variant); }
 .ex-note.err { color: var(--md-error); }
+
+/* 15m. PERBAIKAN UI/UX MOBILE (Paket A + B) ─── */
+/* a. Kartu stok lebih padat (±40px) agar formulir naik ke area terlihat */
+.stock-card { padding: 14px 14px 12px; margin-bottom: 10px; }
+.sc-numwrap { padding: 4px 0 8px; }
+.stock-number { font-size: clamp(60px, 19vw, 88px); }
+.sc-unit { margin-top: 2px; }
+.stat-chip { padding: 8px 10px; }
+/* b. Tombol Kirim lengket di atas navbar (selalu terlihat); keadaan nonaktif tetap terbaca */
+.submit-btn { position: sticky; bottom: calc(var(--nav-total) + 10px); z-index: 6; box-shadow: var(--e2), 0 0 0 4px var(--md-surface-container-lowest); }
+.submit-btn[data-state="idle"]:disabled { background: var(--md-surface-container-high); color: #5a5b64; opacity: 1; box-shadow: 0 0 0 4px var(--md-surface-container-lowest); }
+/* c. Teks minimum 11px (label navbar `.nav-lbl`, peran `.tb-role`: diubah pada aturan aslinya) dan sumbu grafik 10/9px */
+.st-tick { font-size: 10px; } .st-tick.s { font-size: 9px; }
+/* d. Kontras angka nol pada Tabel (≥4,5:1 juga di baris akhir pekan) */
+.mt-zero, .mt-table tbody tr.mt-weekend td.mt-zero { color: #686974; }
+/* e. Target sentuh ≥44px */
+.btn-text, .sc-sync, .hf-chip, .st-refresh { min-height: 44px; }
+.photo-remove { width: 44px; height: 44px; }
+/* f. Papan ketik terbuka: navbar disembunyikan, tombol Kirim tetap terlihat tepat di atas papan ketik */
+body.kb-open { --nav-total: 0px; }
+body.kb-open .bottomnav { display: none; }
+/* g. Galat di kolom + fokus dialog */
+.field-err { font-size: 12px; font-weight: 500; line-height: 1.35; color: var(--md-error); padding: 2px 4px 0; }
+.tf.invalid, .qty-field.invalid { box-shadow: inset 0 0 0 2px var(--md-error); }
+.tf.invalid .tf-label { color: var(--md-error); }
+.photo-thumb.invalid { border-color: var(--md-error) !important; }
+.modal-sheet:focus, .history-sheet:focus, .monthly-sheet:focus { outline: none; }
 
 /* 15b. PREFERENSI GERAK BERKURANG */
 @media (prefers-reduced-motion: reduce) {

@@ -349,6 +349,22 @@ function toast(msg, type='', ms) {
   _tT = setTimeout(() => E.toast.classList.remove('show'), ms || (type==='err' ? 4500 : 2800));
 }
 
+/* ── GALAT DI KOLOM (selain toast): tandai kolom + teks bantu, geser ke kolom itu ── */
+function fieldErr(errId, msg, marks, focusEl) {
+  const e = $(errId); if (!e) return;
+  clearFieldErr(errId);
+  e.textContent = msg; e.classList.remove('hidden');
+  e._marks = [].concat(marks || []).map(m => (m && m.closest && m.closest('.tf')) || m).filter(Boolean);
+  e._marks.forEach(m => m.classList.add('invalid'));
+  try { (e._marks[0] || e).scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+  if (focusEl) { try { focusEl.focus({ preventScroll: true }); } catch (_) {} }
+}
+function clearFieldErr(errId) {
+  const e = $(errId); if (!e) return;
+  (e._marks || []).forEach(m => m.classList.remove('invalid')); e._marks = [];
+  e.textContent = ''; e.classList.add('hidden');
+}
+
 /* ── CLOCK ───────────────────── */
 let _lastDay = '';
 function updateClock() {
@@ -611,7 +627,7 @@ function doDeleteTransaction() {
 
 /* ── EDIT MODAL ──────────────── */
 function openEditModal(tx) {
-  S.pendingEdit = tx;
+  S.pendingEdit = tx; clearFieldErr('editQtyErr'); clearFieldErr('editWhenErr');
   const isAmbil = tx.jenis==='AMBIL';
   const now = nowS();
   const minAllowed = toISODate(new Date(now.getTime() - MAX_BACKDATE_DAYS*86400000));
@@ -656,15 +672,16 @@ function checkWhenRange(date, time) {
 function doEditTransaction() {
   const tx = S.pendingEdit; if (!tx) return;
   if (isDemo()) { toast('Mode demo — tidak dapat mengedit.','err'); return; }
+  clearFieldErr('editQtyErr'); clearFieldErr('editWhenErr');
   const qty = readEditQty();
-  if (!qty) { toast('Jumlah harus lebih dari 0.','err'); return; }
+  if (!qty) { fieldErr('editQtyErr','Jumlah harus lebih dari 0.', E.editQtyInput, E.editQtyInput); toast('Jumlah harus lebih dari 0.','err'); return; }
   const note = E.editNoteInput.value.trim();
   const date = E.editDateInput.value, time = E.editTimeInput.value;
-  if (!date || !time) { toast('Tanggal dan jam harus diisi.','err'); return; }
+  if (!date || !time) { fieldErr('editWhenErr','Tanggal dan jam harus diisi.', [E.editDateInput, E.editTimeInput]); toast('Tanggal dan jam harus diisi.','err'); return; }
 
   /* Tanggal/jam yang tidak diubah tidak dicek batas mundur (agar qty transaksi lama tetap bisa diedit). */
   const whenChanged = date !== tx.date || time !== String(tx.time||'').substring(0,5);
-  if (whenChanged) { const err = checkWhenRange(date, time); if (err) { toast(err,'err'); return; } }
+  if (whenChanged) { const err = checkWhenRange(date, time); if (err) { fieldErr('editWhenErr', err, [E.editDateInput, E.editTimeInput]); toast(err,'err'); return; } }
   if (qty === tx.qty && note === (tx.note||'') && !whenChanged) { toast('Tidak ada perubahan.'); return; }
 
   E.saveEditBtn.disabled = true; E.saveEditBtn.innerHTML = loadingBar() + 'Menyimpan…';
@@ -1595,9 +1612,9 @@ function handleSubmitTap() {
   setActivity();
   if (S.submitState==='submitting') return;   /* cegah klik berulang selama proses */
   if (!Number.isInteger(S.qty)||S.qty<1) { fx('warn'); toast('Jumlah harus lebih dari 0.','err'); return; }
-  if (S.mode==='DATANG'&&!S.photos.length) { fx('warn'); toast('Foto invoice belum diambil.','err'); return; }
+  if (S.mode==='DATANG'&&!S.photos.length) { fx('warn'); fieldErr('photoErr','Foto invoice belum diambil.', E.photoThumbs[0]); toast('Foto invoice belum diambil.','err'); return; }
   const w = readTxWhen();
-  if (w.error) { fx('warn'); toast(w.error,'err'); return; }
+  if (w.error) { fx('warn'); fieldErr('timeErr', w.error, [E.txDateInput, E.txTimeInput]); toast(w.error,'err'); return; }
 
   /* Tanpa dialog konfirmasi: data langsung diproses. */
   fx('tap');
@@ -1608,7 +1625,7 @@ function handleSubmitTap() {
 /* ── MODE ────────────────────── */
 function setMode(mode) {
   if (S.submitState==='submitting') return;   /* jangan ganti mode saat penyimpanan berjalan */
-  S.mode=mode; clearPhotos();
+  S.mode=mode; clearPhotos(); clearFieldErr('photoErr'); clearFieldErr('timeErr');
   E.modeAmbilBtn.classList.toggle('active', mode!=='DATANG');
   E.modeDatangBtn.classList.toggle('active', mode==='DATANG');
   E.photoSection.classList.toggle('hidden', mode!=='DATANG');
@@ -1625,6 +1642,7 @@ function clearPhotos() { S.photos = []; E.photoInputCamera.value = ''; E.photoIn
 /* Dua slot: slot pertama selalu tampil; slot ke-2 muncul setelah foto pertama ada (opsional). Hapus foto pertama → foto ke-2 naik. */
 function renderPhotoThumb() {
   const ph = S.photos;
+  if (ph.length) clearFieldErr('photoErr');
   E.photoGrid.classList.toggle('two', ph.length >= 1);
   for (let k = 0; k < 2; k++) {
     const thumb = E.photoThumbs[k], rm = E.photoRemoves[k], has = !!ph[k];
@@ -1653,7 +1671,7 @@ function openTxWhenEdit() {
   setActivity();
 }
 function resetTxWhen() {
-  S.txCustom = false;
+  S.txCustom = false; clearFieldErr('timeErr');
   E.txDateInput.value = ''; E.txTimeInput.value = '';
   E.timeEditView.classList.add('hidden');
   E.timeNowView.classList.remove('hidden');
@@ -1824,7 +1842,7 @@ function compressImage(file,maxW=1280,q=0.72) {
 /* ── ADMIN ───────────────────── */
 function openAdmin() {
   const demo=isDemo();
-  E.correctStockInput.value=''; E.correctNoteInput.value='';
+  E.correctStockInput.value=''; E.correctNoteInput.value=''; clearFieldErr('correctErr'); clearFieldErr('annErr');
   E.correctStockBtn.disabled=demo; E.correctStockBtn.innerHTML=demo?ic('lock','ms-20')+'Mode Demo':'Simpan Koreksi';
   [E.reloadConfigBtn,E.reloadTxBtn,E.reloadAllBtn].forEach(b=>{ b.disabled=demo; });
   onAdminOpenAnnouncements(demo);
@@ -1834,8 +1852,9 @@ function closeAdmin() { E.adminModal.classList.add('hidden'); }
 function doCorrectStock() {
   if(isDemo()){toast('Mode demo — tidak dapat menyimpan.','err');return;}
   const val=E.correctStockInput.value.trim(), note=E.correctNoteInput.value.trim();
-  if(!val){toast('Isi stok aktual dulu.','err');return;}
-  if(!note){toast('Alasan koreksi wajib diisi.','err');return;}
+  clearFieldErr('correctErr');
+  if(!val){fieldErr('correctErr','Isi stok aktual dulu.', E.correctStockInput, E.correctStockInput);toast('Isi stok aktual dulu.','err');return;}
+  if(!note){fieldErr('correctErr','Alasan koreksi wajib diisi.', E.correctNoteInput, E.correctNoteInput);toast('Alasan koreksi wajib diisi.','err');return;}
   E.correctStockBtn.disabled=true; E.correctStockBtn.textContent='Menyimpan…';
   google.script.run
     .withSuccessHandler(res=>{
@@ -1904,7 +1923,8 @@ function onAdminOpenAnnouncements(demo) {
 function doSaveRunningText() {
   if (isDemo()) { toast('Mode demo — tidak dapat menyimpan.','err'); return; }
   const pesan = A.pesan.value.trim(), editing = !!currentRunningText();
-  if (!pesan) { toast('Isi teks running text dulu.','err'); return; }
+  clearFieldErr('annErr');
+  if (!pesan) { fieldErr('annErr','Isi teks running text dulu.', A.pesan, A.pesan); toast('Isi teks running text dulu.','err'); return; }
   if (pesan === currentRunningText()) { toast('Tidak ada perubahan.'); return; }
   S.annBusy = true; A.sendBtn.disabled = true; A.delBtn.disabled = true;
   A.sendBtn.innerHTML = loadingBar() + (editing ? 'Menyimpan…' : 'Mengirim…');
@@ -1945,15 +1965,78 @@ function doDeleteRunningText() {
 
 /* ███ 7. EVENT & INIT ███ */
 /* Esc menutup dialog/lembar yang paling atas. */
+/* Urutan tumpukan dialog/lembar (teratas dulu) — dipakai tombol Esc, tombol Back, dan perangkap Tab. */
+const DIALOG_ORDER = [['confirmModal', hideConfirm], ['pickerModal', closePhotoPicker], ['exportModal', closeExportDialog], ['editModal', closeEditModal], ['deleteModal', closeDeleteModal],
+                      ['adminModal', closeAdmin], ['menuModal', closeMenu], ['monthlyModal', closeMonthlyTable], ['historyModal', closeHistory]];
 function closeTopDialog() {
-  const order = [['confirmModal', hideConfirm], ['pickerModal', closePhotoPicker], ['exportModal', closeExportDialog], ['editModal', closeEditModal], ['deleteModal', closeDeleteModal],
-                 ['adminModal', closeAdmin], ['menuModal', closeMenu], ['monthlyModal', closeMonthlyTable], ['historyModal', closeHistory]];
-  for (const [id, fn] of order) if (!E[id].classList.contains('hidden')) { fn(); return true; }
+  for (const [id, fn] of DIALOG_ORDER) if (!E[id].classList.contains('hidden')) { fn(); return true; }
   return false;
+}
+
+/* ── TOMBOL BACK ─────────────────
+   Satu entri riwayat "penjaga" didorong setelah ketukan (browser mengabaikan entri tanpa interaksi). Back menutup lembar/dialog teratas
+   tanpa keluar dari aplikasi; di layar utama Back pertama hanya memberi petunjuk, Back berikutnya keluar seperti biasa. */
+let _backArmed = false;
+function armBack() { if (_backArmed) return; try { history.pushState({ galon: 1 }, ''); _backArmed = true; } catch (_) {} }
+function onPopState() {
+  _backArmed = false;   /* entri penjaga terpakai */
+  if (closeTopDialog()) { armBack(); return; }
+  toast('Tekan Back sekali lagi untuk keluar.', '', 2200);
+}
+
+/* ── PAPAN KETIK: navbar disembunyikan agar tombol Kirim (lengket) tetap terlihat tepat di atas papan ketik ── */
+const KB_TYPES = ['text', 'number', 'search', 'tel', 'email', 'password', 'url'];
+function syncKb() {
+  const a = document.activeElement;
+  document.body.classList.toggle('kb-open', !!(a && ((a.tagName === 'INPUT' && KB_TYPES.includes(a.type || 'text')) || a.tagName === 'TEXTAREA')));
+}
+function bindKeyboardState() {
+  document.addEventListener('focusin', syncKb);
+  document.addEventListener('focusout', () => setTimeout(syncKb, 250));   /* tunda: ketuk Kirim tidak boleh meleset karena tata letak bergeser */
+  document.addEventListener('pointerup', () => setTimeout(syncKb, 300), { passive: true });   /* jaring pengaman bila fokus hilang tanpa peristiwa */
+}
+
+/* ── A11Y DIALOG: fokus pindah ke dialog saat dibuka dan kembali ke pemicu saat ditutup; Tab berputar di dalam dialog ── */
+function dialogBox(el) { return el.querySelector('.modal-sheet, .history-sheet, .monthly-sheet') || el; }
+function bindDialogA11y() {
+  const openers = new Map(), info = new Map();
+  DIALOG_ORDER.forEach(([id]) => { const el = E[id], box = dialogBox(el); box.setAttribute('tabindex', '-1'); info.set(el, { id, box }); });
+  /* SATU pengamat untuk semua dialog: catatan perubahan diproses menurut urutan kejadian (menu ditutup → Panel Admin dibuka tidak saling merebut fokus),
+     dan tiap catatan dibaca dengan nilai kelas lama/berikutnya agar tutup-lalu-buka-lagi dalam satu giliran tetap terdeteksi. */
+  const hid = c => /(^|\s)hidden(\s|$)/.test(c || '');
+  const mo = new MutationObserver(recs => {
+    recs.forEach((r, i) => {
+      const { id, box } = info.get(r.target), nxt = recs.slice(i + 1).find(x => x.target === r.target);
+      const before = hid(r.oldValue), after = nxt ? hid(nxt.oldValue) : r.target.classList.contains('hidden');
+      if (before && !after) {   /* dibuka */
+        openers.set(id, document.activeElement);
+        try { box.focus({ preventScroll: true }); } catch (_) {}
+      } else if (!before && after) {   /* ditutup */
+        const op = openers.get(id); openers.delete(id);
+        if (op && op !== document.body && document.contains(op) && !op.closest('.hidden')) { try { op.focus({ preventScroll: true }); } catch (_) {} }
+      }
+    });
+  });
+  DIALOG_ORDER.forEach(([id]) => mo.observe(E[id], { attributes: true, attributeFilter: ['class'], attributeOldValue: true }));   /* hanya 9 elemen dialog, bukan seluruh dokumen */
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Tab') return;
+    const top = DIALOG_ORDER.find(([id]) => !E[id].classList.contains('hidden')); if (!top) return;
+    const box = dialogBox(E[top[0]]);
+    const items = [...box.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(x => !x.closest('.hidden'));
+    if (!items.length) { ev.preventDefault(); return; }
+    const first = items[0], last = items[items.length - 1], cur = document.activeElement;
+    if (!box.contains(cur) || cur === box) { ev.preventDefault(); (ev.shiftKey ? last : first).focus(); }
+    else if (ev.shiftKey && cur === first) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && cur === last) { ev.preventDefault(); first.focus(); }
+  });
 }
 /* ── EVENTS ──────────────────── */
 function bindEvents() {
   document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && closeTopDialog()) ev.preventDefault(); });
+  window.addEventListener('popstate', onPopState);
+  document.addEventListener('pointerup', armBack, { capture: true, passive: true });   /* entri penjaga dipasang pada ketukan (ada interaksi pengguna) */
+  [[E.txDateInput,'timeErr'],[E.txTimeInput,'timeErr'],[E.editQtyInput,'editQtyErr'],[E.editDateInput,'editWhenErr'],[E.editTimeInput,'editWhenErr'],
+   [E.correctStockInput,'correctErr'],[E.correctNoteInput,'correctErr'],[A.pesan,'annErr']].forEach(([el, id]) => { el.addEventListener('input', () => clearFieldErr(id)); el.addEventListener('change', () => clearFieldErr(id)); });
   window.addEventListener('pagehide', saveCache);   /* simpan aktivitas terakhir saat aplikasi ditutup */
   E.loginBtn.addEventListener('click', doLogin);
   E.codeInput.addEventListener('keydown', ev=>{ if(ev.key==='Enter') doLogin(); });
@@ -2102,7 +2185,7 @@ function bindKeyboardAwareScroll() {
 function init() {
   Splash.show('Memulai…');
   bindEvents();
-  bindKeyboardAwareScroll();
+  bindKeyboardAwareScroll(); bindKeyboardState(); bindDialogA11y();
   updateClock(); renderFx();
   const cache = loadCache(), auth = loadAuth();
   if (!auth && (!cache || !cache.token)) {   /* belum pernah masuk / sudah Keluar */

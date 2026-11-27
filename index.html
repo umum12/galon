@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="color-scheme" content="light">
   <title>Galon App</title>
-  <meta name="theme-color" content="#2151da">
+  <meta name="theme-color" content="#ffffff">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Galon App">
@@ -41,11 +41,11 @@
 <div class="app">
 
   <!-- LOGIN -->
-  <div id="loginView" class="login-view">
+  <div id="loginView" class="login-view" role="main">
     <div class="login-card">
       <div class="login-brand">
         <svg class="login-logo" viewBox="0 0 512 512" role="img" aria-label="Galon App"><use href="#gl-logo"/></svg>
-        <div class="login-title">Galon App</div>
+        <h1 class="login-title">Galon App</h1>
         <div class="login-sub">Pantau &amp; catat stok galon dengan cepat</div>
       </div>
       <label class="tf tf-lg with-icon">
@@ -68,7 +68,7 @@
       <div class="tb-brand">
         <svg class="tb-logo" viewBox="0 0 512 512" aria-hidden="true"><use href="#gl-logo"/></svg>
         <div class="tb-text">
-          <div class="tb-title" id="scAppName">Galon App</div>
+          <h1 class="tb-title" id="scAppName">Galon App</h1>
           <div class="tb-sub" id="scClock">—</div>
         </div>
       </div>
@@ -79,6 +79,8 @@
         </button>
       </div>
     </header>
+
+    <main id="mainContent">
 
     <!-- KARTU STOK -->
     <section class="stock-card safe" id="stockCard">
@@ -142,6 +144,7 @@
             <label class="tf always"><input id="txDateInput" type="date"><span class="tf-label">Tanggal</span></label>
             <label class="tf always"><input id="txTimeInput" type="time"><span class="tf-label">Jam</span></label>
           </div>
+          <div class="field-err hidden" id="timeErr" role="alert"></div>
         </div>
       </div>
       <div class="hidden" id="photoSection">
@@ -156,6 +159,7 @@
           </div>
         </div>
         <div class="photo-hint">Invoice boleh 1 atau 2 foto (foto ke-2 opsional)</div>
+        <div class="field-err hidden" id="photoErr" role="alert"></div>
         <input type="file" id="photoInputCamera" accept="image/*" capture="environment">
         <input type="file" id="photoInputGallery" accept="image/*">
       </div>
@@ -168,12 +172,14 @@
       <div class="tx-list" id="txList"></div>
     </section>
 
+    </main>
+
     <!-- NAVBAR BAWAH (5 menu, mengikuti referensi UI) -->
     <nav class="bottomnav" id="bottomNav" aria-label="Navigasi utama">
       <button type="button" class="nav-item" id="navStatistik"><span class="nav-ic"><span class="ms" aria-hidden="true">insights</span></span><span class="nav-lbl">Statistik</span></button>
-      <button type="button" class="nav-item" id="navSaya"><span class="nav-ic"><span class="ms" aria-hidden="true">receipt_long</span></span><span class="nav-lbl">Riwayat Saya</span></button>
+      <button type="button" class="nav-item" id="navSaya" aria-label="Riwayat Saya"><span class="nav-ic"><span class="ms" aria-hidden="true">receipt_long</span></span><span class="nav-lbl">Riwayatku</span></button>
       <button type="button" class="nav-item nav-input active" id="navInput" aria-current="page"><span class="nav-ic"><span class="ms" aria-hidden="true">add</span></span><span class="nav-lbl">Input</span></button>
-      <button type="button" class="nav-item" id="navRiwayat"><span class="nav-ic"><span class="ms" aria-hidden="true">history</span></span><span class="nav-lbl">Riwayat Lengkap</span></button>
+      <button type="button" class="nav-item" id="navRiwayat" aria-label="Riwayat Lengkap"><span class="nav-ic"><span class="ms" aria-hidden="true">history</span></span><span class="nav-lbl">Riwayat</span></button>
       <button type="button" class="nav-item" id="navTabel"><span class="nav-ic"><span class="ms" aria-hidden="true">table_view</span></span><span class="nav-lbl">Tabel</span></button>
     </nav>
 
@@ -181,7 +187,7 @@
 </div><!-- /app -->
 
 <!-- MENU -->
-<div id="menuModal" class="modal-backdrop hidden">
+<div id="menuModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="menuNama">
   <div class="modal-sheet">
     <div class="sheet-handle"></div>
     <div class="menu-user">
@@ -198,10 +204,10 @@
 </div>
 
 <!-- PANEL ADMIN -->
-<div id="adminModal" class="modal-backdrop hidden">
+<div id="adminModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
   <div class="modal-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title"><span class="ms" aria-hidden="true">admin_panel_settings</span>Panel Admin</div>
+    <div class="sheet-title" id="adminTitle"><span class="ms" aria-hidden="true">admin_panel_settings</span>Panel Admin</div>
     <div class="admin-block">
       <div class="admin-block-title"><span class="ms ms-20" aria-hidden="true">inventory_2</span>Koreksi Stok</div>
       <div class="admin-block-desc">Untuk stock opname. Input jumlah galon <strong>hasil hitung fisik aktual</strong> (boleh lebih atau kurang dari catatan sistem). Selisihnya otomatis tercatat sebagai KOREKSI dan tampil di kolom (±) pada Tabel Bulanan.</div>
@@ -209,12 +215,14 @@
         <label class="tf" style="flex:0 0 120px"><input id="correctStockInput" type="number" placeholder=" " min="0" inputmode="numeric"><span class="tf-label">Stok aktual</span></label>
         <label class="tf" style="flex:1;min-width:0"><input id="correctNoteInput" type="text" placeholder=" " maxlength="200"><span class="tf-label">Alasan (wajib)</span></label>
       </div>
+      <div class="field-err hidden" id="correctErr" role="alert"></div>
       <button class="btn btn-purple btn-block" id="correctStockBtn">Simpan Koreksi</button>
     </div>
     <div class="admin-block">
       <div class="admin-block-title"><span class="ms ms-20" aria-hidden="true">campaign</span>Running Text</div>
       <div class="admin-block-desc">Satu teks berjalan di bagian atas aplikasi untuk semua pengguna (petugas, admin, demo). Tampil terus tanpa batas waktu sampai Anda mengedit atau menghapusnya.</div>
       <label class="tf"><textarea id="annPesan" maxlength="300" rows="3" placeholder=" "></textarea><span class="tf-label">Teks running text (maks. 300 karakter)</span></label>
+      <div class="field-err hidden" id="annErr" role="alert"></div>
       <button type="button" class="btn btn-primary btn-block" id="annSendBtn"><span class="ms ms-20" aria-hidden="true">send</span>Kirim Running Text</button>
       <button type="button" class="btn btn-ghost btn-block hidden" id="annDeleteBtn"><span class="ms ms-20" aria-hidden="true">delete</span>Hapus Running Text</button>
     </div>
@@ -243,10 +251,10 @@
 </div>
 
 <!-- KELOLA TRANSAKSI -->
-<div id="deleteModal" class="modal-backdrop hidden">
+<div id="deleteModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
   <div class="modal-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">Kelola Transaksi</div>
+    <div class="sheet-title" id="deleteTitle">Kelola Transaksi</div>
     <div class="delete-card">
       <div class="delete-nama" id="deleteNama">—</div>
       <div class="delete-meta" id="deleteMeta">—</div>
@@ -259,7 +267,7 @@
 </div>
 
 <!-- RIWAYAT LENGKAP / SAYA -->
-<div id="historyModal" class="history-backdrop hidden">
+<div id="historyModal" class="history-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
   <div class="history-sheet">
     <div class="mt-header">
       <div class="mt-title" id="historyTitle">Riwayat Lengkap</div>
@@ -295,10 +303,10 @@
 </div>
 
 <!-- EDIT TRANSAKSI -->
-<div id="editModal" class="modal-backdrop hidden">
+<div id="editModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="editTitle">
   <div class="modal-sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">Edit Transaksi</div>
+    <div class="sheet-title" id="editTitle">Edit Transaksi</div>
     <div class="delete-card">
       <div class="delete-nama" id="editNama">—</div>
       <div class="delete-meta" id="editMeta">—</div>
@@ -310,6 +318,7 @@
         <input class="qty-field" id="editQtyInput" type="number" value="1" min="1" max="999" inputmode="numeric" aria-label="Jumlah galon">
         <button type="button" class="qty-side" id="editPlusBtn" aria-label="Tambah"><span class="ms" aria-hidden="true">add</span></button>
       </div>
+      <div class="field-err hidden" id="editQtyErr" role="alert"></div>
     </div>
     <label class="tf"><input id="editNoteInput" type="text" maxlength="200" placeholder=" " autocomplete="off"><span class="tf-label">Catatan (opsional)</span></label>
     <div class="admin-field">
@@ -318,6 +327,7 @@
         <label class="tf always"><input id="editDateInput" type="date"><span class="tf-label">Tanggal</span></label>
         <label class="tf always"><input id="editTimeInput" type="time"><span class="tf-label">Jam</span></label>
       </div>
+      <div class="field-err hidden" id="editWhenErr" role="alert"></div>
     </div>
     <div class="delete-stock" id="editStockPreview">—</div>
     <button class="btn btn-primary btn-block" id="saveEditBtn">Simpan Perubahan</button>
@@ -326,7 +336,7 @@
 </div>
 
 <!-- DIALOG KONFIRMASI (generik) -->
-<div id="confirmModal" class="modal-backdrop center hidden">
+<div id="confirmModal" class="modal-backdrop center hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
   <div class="modal-sheet center">
     <div class="sheet-title" id="confirmTitle">Konfirmasi</div>
     <div class="confirm-msg" id="confirmMessage">—</div>
@@ -378,7 +388,7 @@
 </div>
 
 <!-- LAPORAN BULANAN -->
-<div id="monthlyModal" class="monthly-backdrop hidden">
+<div id="monthlyModal" class="monthly-backdrop hidden" role="dialog" aria-modal="true" aria-label="Laporan bulanan">
   <div class="monthly-sheet">
 
     <div class="mt-picker-screen" id="mtPickerScreen">
